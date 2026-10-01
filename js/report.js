@@ -1,7 +1,7 @@
 // Generación de informes mensuales (.xlsx y .ics) a partir de los fichajes.
 import {
   DAY_MS, MONTHS, WEEKDAYS, monthDays, sumDays, excelSerial, excelDateSerial,
-  fmtDur, fmtKey, dailyTarget,
+  fmtDur, fmtKey, scheduleFor, scheduleTarget, describeSchedule, weeklyTarget,
 } from './calc.js';
 import { buildXlsx, colName } from './xlsx.js';
 
@@ -102,9 +102,13 @@ export function monthWorkbook(y, m, sessions, settings, now = Date.now()) {
 
   const summary = [
     [{ v: `Registro de jornada – ${title}`, s: 'bold' }, null],
-    ['Jornada diaria', `${fmtDur(dailyTarget(settings))} h (habitual ${settings.workStart}–${settings.workEnd}, Europe/Madrid)`],
-    ['Días laborables', settings.workDays.map((d) => WEEKDAYS[d]).join(', ')],
-    ['Criterio', 'Horas extra = lo trabajado por encima de la jornada diaria; en fines de semana, festivos y vacaciones todo es extra. Pendiente = lo que falta para completar la jornada.'],
+    ['Horario', settings.customSchedule ? 'Personalizado por día (hora de Madrid)' : 'General (hora de Madrid)'],
+    ...[1, 2, 3, 4, 5, 6, 0].map((wd) => {
+      const sched = scheduleFor(settings, wd);
+      return [`  ${WEEKDAYS[wd]}`, sched ? `${describeSchedule(sched)} → ${fmtDur(scheduleTarget(sched))} h` : 'No laborable'];
+    }),
+    ['Jornada semanal', `${fmtDur(weeklyTarget(settings))} h`],
+    ['Criterio', 'Horas extra = lo trabajado por encima de la jornada del día (horario menos break); en fines de semana, festivos y vacaciones todo es extra. Pendiente = lo que falta para completar la jornada.'],
     [],
     [{ v: 'Concepto', s: 'header' }, { v: 'Horas', s: 'header' }],
     ['Horas trabajadas', dur(tot.worked)],

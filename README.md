@@ -9,6 +9,9 @@ las **horas extra**, listas para pasarlas al calendario de la empresa.
   volver a conectarte por la tarde).
 - **Jornada de 8 h al día:** lo que trabajes por encima de 8 h son **horas extra**; lo que falte
   queda **pendiente de compensar**. Da igual a qué hora entres o salgas.
+- **Configurable para cualquier persona:** horario de entrada y salida, **break para comer**
+  (vacío = jornada continua) y, si hace falta, un **horario distinto para cada día de la semana**.
+  La app calcula y muestra las horas de jornada diarias y semanales.
 - En **fines de semana, festivos y vacaciones** no se espera jornada: todo lo fichado es extra.
 
 ---
@@ -104,19 +107,28 @@ El repositorio es **privado**, y GitHub Pages solo publica gratis desde reposito
 - **Informes:** elige el mes y pulsa **Descargar Excel**. El fichero se guarda en *Descargas*.
   **Compartir Excel** lo envía directamente por correo, Drive, Teams, etc.
   **Horas extra para calendario (.ics)** crea un evento por cada tramo de horas extra.
-- **Ajustes:** horario habitual (define la jornada de 8 h), días laborables, **festivos** (el botón
-  añade los festivos nacionales del año; añade a mano los de tu comunidad y localidad), y copia de
-  seguridad.
+- **Ajustes → Jornada laboral:**
+  - **Entrada, salida y break (min)**. El break es el tiempo para comer que no cuenta como jornada
+    (30, 60, 120 min…); déjalo vacío si la jornada es continua. La app muestra la jornada
+    resultante: p. ej. 08:00–17:00 con 60 min de break = **8:00 h al día**.
+  - **Días laborables** de la semana.
+  - **Horario personalizado cada día:** al activarlo aparece cada día de la semana con su entrada,
+    salida y break (vacío = sin break), y se puede marcar o desmarcar como laborable. Muestra las
+    horas de cada día y el total semanal. Al desactivarlo se vuelve al horario general sin perder
+    el personalizado.
+- **Ajustes → Festivos** (el botón añade los festivos nacionales del año; añade a mano los de tu
+  comunidad y localidad) y **copia de seguridad**.
 
 ### Cómo se calculan las horas extra
 
-En un día laborable se esperan **8 h** (la duración de tu horario habitual 07:00–15:00). Se suman
-todos los tramos fichados del día:
+En un día laborable se espera la **jornada del día** = (salida − entrada) − break. Con el horario
+por defecto (07:00–15:00, sin break) son **8 h**. Se suman todos los tramos fichados del día:
 
-- **Horas extra** = lo trabajado por encima de 8 h.
-- **Pendiente de compensar** = lo que falte para llegar a 8 h.
+- **Horas extra** = lo trabajado por encima de la jornada del día.
+- **Pendiente de compensar** = lo que falte para completarla.
 - Los tramos de horas extra que salen en el Excel y en el .ics son **el final del día**, desde el
-  momento en que completas las 8 h.
+  momento en que completas la jornada.
+- Si sales a comer, haz clock out y vuelve a hacer clock in: el tiempo de comida no se suma.
 - Se contabiliza por minutos completos (los segundos no cuentan).
 
 | Situación | Ejemplo | Extra | Pendiente |
@@ -127,12 +139,14 @@ todos los tramos fichados del día:
 | Sales antes | 07:00–13:00 | 0:00 | 2:00 |
 | Sábado, domingo, festivo o vacaciones | 10:00–12:00 | 2:00 | 0:00 |
 | Fichaje que cruza medianoche | 22:00–01:00 | Se reparte entre los dos días | |
+| Jornada partida 08:00–17:00 con 60 min de break (8 h) | 08:00–13:00 y 14:00–17:30 | 0:30 | 0:00 |
+| Horario personalizado: viernes 08:00–14:00 (6 h) | 08:00–14:30 | 0:30 | 0:00 |
 
 ### Contenido del Excel
 
 | Hoja | Contenido |
 |---|---|
-| **Resumen** | Totales del mes: trabajado, jornada teórica, horas extra, horas pendientes de compensar, balance neto, días de vacaciones y criterio de cálculo. |
+| **Resumen** | Horario de cada día de la semana con sus horas y jornada semanal; totales del mes: trabajado, jornada teórica, horas extra, horas pendientes de compensar, balance neto, días de vacaciones y criterio de cálculo. |
 | **Diario** | Una fila por día: tipo (laborable, festivo, vacaciones, fin de semana), nº de fichajes, primera entrada, última salida, trabajado, jornada, extra, pendiente y balance, con fila de TOTAL. |
 | **Fichajes** | Cada tramo de entrada/salida con su duración, sus horas extra, el origen (botón o manual) y la nota. |
 | **Horas extra** | Cada tramo de horas extra (fecha, desde, hasta, duración, motivo), listo para copiar al calendario de la empresa. |
@@ -164,4 +178,4 @@ npm test        # ejecuta los tests
 npm start       # servidor local en http://localhost:8080
 ```
 
-Al publicar una versión nueva, cambia `CACHE` en `sw.js` (p. ej. `fichajes-v3`).
+Al publicar una versión nueva, cambia `CACHE` en `sw.js` (p. ej. `fichajes-v4`).

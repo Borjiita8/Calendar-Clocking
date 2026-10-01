@@ -8,7 +8,12 @@ export const DAY_MS = 86400000;
 export const DEFAULT_SETTINGS = {
   workStart: '07:00',
   workEnd: '15:00',
+  breakMinutes: 0, // 0 = jornada continua
   workDays: [1, 2, 3, 4, 5], // 0 = domingo ... 6 = sábado
+  // Horario personalizado por día de la semana (si customSchedule = true):
+  // { 0: { work, start, end, breakMinutes }, ..., 6: {...} }
+  customSchedule: false,
+  days: null,
   holidays: [], // ['YYYY-MM-DD', ...]
   vacations: [], // [{ id, from: 'YYYY-MM-DD', to: 'YYYY-MM-DD' }]
 };
@@ -110,12 +115,47 @@ export function inVacation(key, settings) {
   return (settings.vacations || []).some((v) => key >= v.from && key <= v.to);
 }
 
+/** Minutos entre dos horas 'HH:MM'. */
+export function minutesBetween(start, end) {
+  const [sh, sm] = hm(start);
+  const [eh, em] = hm(end);
+  return eh * 60 + em - sh * 60 - sm;
+}
+
+/** Duración de una jornada: (salida − entrada) − break, en ms. */
+export function scheduleTarget(sched) {
+  if (!sched) return 0;
+  return Math.max(0, (minutesBetween(sched.start, sched.end) - (sched.breakMinutes || 0)) * 60000);
+}
+
+/** Horario general como plantilla para cada día de la semana. */
+export function generalDays(settings) {
+  const days = {};
+  for (let wd = 0; wd < 7; wd++) {
+    days[wd] = { work: settings.workDays.includes(wd), start: settings.workStart,
+      end: settings.workEnd, breakMinutes: settings.breakMinutes || 0 };
+  }
+  return days;
+}
+
+/** Horario de un día de la semana (0 = domingo) o null si no es laborable. */
+export function scheduleFor(settings, wd) {
+  const days = settings.customSchedule && settings.days ? settings.days : generalDays(settings);
+  const d = days[wd];
+  return d && d.work ? { start: d.start, end: d.end, breakMinutes: d.breakMinutes || 0 } : null;
+}
+
+/** Días de la semana laborables según el horario activo. */
+export function activeWorkDays(settings) {
+  return [0, 1, 2, 3, 4, 5, 6].filter((wd) => scheduleFor(settings, wd));
+}
+
 /** Tipo de día: Laborable, Festivo, Vacaciones, Fin de semana o No laborable. */
 export function dayKind(y, m, d, settings) {
   const key = keyOf(y, m, d);
   const wd = weekdayOf(y, m, d);
   if (settings.holidays.includes(key)) return 'Festivo';
-  if (!settings.workDays.includes(wd)) return wd === 0 || wd === 6 ? 'Fin de semana' : 'No laborable';
+  if (!scheduleFor(settings, wd)) return wd === 0 || wd === 6 ? 'Fin de semana' : 'No laborable';
   if (inVacation(key, settings)) return 'Vacaciones';
   return 'Laborable';
 }
@@ -125,18 +165,32 @@ export function isWorkday(y, m, d, settings) {
   return dayKind(y, m, d, settings) === 'Laborable';
 }
 
-/** Duración de la jornada diaria (por defecto 07:00–15:00 = 8 h). */
-export function dailyTarget(settings) {
-  const [sh, sm] = hm(settings.workStart);
-  const [eh, em] = hm(settings.workEnd);
-  return Math.max(0, (eh * 60 + em - sh * 60 - sm) * 60000);
+/** Horas de jornada de un día de la semana (por defecto, lunes). */
+export function dailyTarget(settings, wd = 1) {
+  return scheduleTarget(scheduleFor(settings, wd));
 }
 
-/** Ventana del horario habitual [inicio, fin] en ms UTC (solo orientativa). */
-export function workWindow(y, m, d, settings) {
-  const [sh, sm] = hm(settings.workStart);
-  const [eh, em] = hm(settings.workEnd);
-  return [zonedToUtc(y, m, d, sh, sm), zonedToUtc(y, m, d, eh, em)];
+/** Total de horas de jornada a la semana. */
+export function weeklyTarget(settings) {
+  return [0, 1, 2, 3, 4, 5, 6].reduce((a, wd) => a + dailyTarget(settings, wd), 0);
+}
+
+/** Descripción legible del horario de un día: «07:00–15:00» o «08:00–17:00 (break 1:00)». */
+export function describeSchedule(sched) {
+  if (!sched) return 'No laborable';
+  const brk = sched.breakMinutes ? ` (break ${fmtDur(sched.breakMinutes * 60000)})` : '';
+  return `${sched.start}–${sched.end}${brk}`;
+}
+
+/** Error de validación de un horario o null si es correcto. */
+export function validateSchedule(sched) {
+  if (!sched.start || !sched.end) return 'Indica la hora de entrada y de salida.';
+  const span = minutesBetween(sched.start, sched.end);
+  if (span <= 0) return 'La hora de salida debe ser posterior a la de entrada.';
+  const brk = sched.breakMinutes || 0;
+  if (!Number.isFinite(brk) || brk < 0) return 'El break no puede ser negativo.';
+  if (brk >= span) return 'El break no puede durar tanto como la jornada.';
+  return null;
 }
 
 /** Trocea un fichaje en segmentos por día natural (Madrid). */
@@ -158,7 +212,7 @@ function emptyDay(key, settings) {
   const kind = dayKind(y, m, d, settings);
   const workday = kind === 'Laborable';
   return { key, y, m, d, weekday: weekdayOf(y, m, d), kind, workday,
-    expected: workday ? dailyTarget(settings) : 0,
+    expected: workday ? dailyTarget(settings, weekdayOf(y, m, d)) : 0,
     segments: [], extra: [], worked: 0, overtime: 0, pending: 0, balance: 0 };
 }
 

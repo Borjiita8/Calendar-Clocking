@@ -101,13 +101,20 @@
     <!-- AJUSTES -->
     <section id="view-ajustes" class="view">
       <div class="card">
-        <h2>Horario habitual (hora de Madrid)</h2>
-        <p id="target-hint" class="hint"></p>
-        <div class="row">
-          <label>Entrada <input type="time" id="set-start"></label>
-          <label>Salida <input type="time" id="set-end"></label>
+        <h2>Jornada laboral (hora de Madrid)</h2>
+        <div id="general-schedule">
+          <div class="row three">
+            <label>Entrada <input type="time" id="set-start"></label>
+            <label>Salida <input type="time" id="set-end"></label>
+            <label>Break (min) <input type="number" id="set-break" min="0" max="720" step="5" inputmode="numeric" placeholder="—"></label>
+          </div>
+          <p class="hint">El break es el tiempo para comer que no cuenta como jornada (por ejemplo 30, 60 o 120
+            minutos). Déjalo vacío si tu jornada es continua.</p>
+          <div id="set-days" class="days"></div>
         </div>
-        <div id="set-days" class="days"></div>
+        <label class="check switch"><input type="checkbox" id="set-custom"> Horario personalizado cada día</label>
+        <div id="custom-schedule" class="custom" hidden></div>
+        <p id="target-hint" class="target"></p>
       </div>
 
       <div class="card">

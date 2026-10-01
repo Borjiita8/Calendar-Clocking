@@ -1,7 +1,8 @@
 import * as db from './db.js';
 import {
   DEFAULT_SETTINGS, WEEKDAYS, MONTHS, monthDays, sumDays, dayStats, dayKey, zonedParts,
-  zonedToUtc, dailyTarget, floorMinute, workingDaysBetween, fmtTime, fmtDur, fmtKey, toLocalInput,
+  zonedToUtc, dailyTarget, floorMinute, scheduleFor, scheduleTarget, describeSchedule,
+  validateSchedule, generalDays, weeklyTarget, weekdayOf, workingDaysBetween, fmtTime, fmtDur, fmtKey, toLocalInput,
   fromLocalInput, spanishNationalHolidays,
 } from './calc.js';
 import { monthWorkbook, monthIcs, monthFileName } from './report.js';
@@ -87,11 +88,12 @@ async function clockOut() {
 
 function scheduleHint(now, today, open) {
   const st = state.settings;
-  const target = fmtDur(dailyTarget(st));
+  const sched = scheduleFor(st, weekdayOf(today.y, today.m, today.d));
+  const target = fmtDur(today.expected);
   if (!today.workday) {
     return `Hoy: ${today.kind.toLowerCase()}. No se espera jornada; todo lo que fiches cuenta como horas extra.`;
   }
-  if (today.worked === 0) return `Jornada de hoy: ${target} h (horario habitual ${st.workStart}–${st.workEnd}).`;
+  if (today.worked === 0) return `Jornada de hoy: ${target} h (horario habitual ${describeSchedule(sched)}).`;
   if (today.pending > 0) {
     return open
       ? `Completas tus ${target} h a las ${fmtTime(now + today.pending)}. A partir de ahí, horas extra.`
@@ -159,7 +161,7 @@ function openLate() {
     : 'Indica a qué hora empezaste a trabajar hoy (por ejemplo 07:56). Quedarás fichado como trabajando desde esa hora.';
   $('#late-label').textContent = open ? 'Hora de salida' : 'Hora de entrada';
   $('#late-time').value = !open && dayStats(dayKey(now), state.sessions, state.settings, now).segments.length === 0
-    ? state.settings.workStart
+    ? (scheduleFor(state.settings, weekdayOf(p.y, p.m, p.d))?.start || state.settings.workStart)
     : `${pad(p.h)}:${pad(p.mi)}`;
   $('#late-error').textContent = '';
   $('#late-dialog').showModal();
@@ -291,15 +293,47 @@ function reportXlsx() {
 
 // ---------- Ajustes ----------
 
+const ORDER = [1, 2, 3, 4, 5, 6, 0];
+const breakValue = (v) => (v === '' || v == null ? 0 : Math.round(Number(v)));
+
+function targetText(sched) {
+  const t = fmtDur(scheduleTarget(sched));
+  if (!sched.breakMinutes) return `${t} h al día (jornada continua)`;
+  return `${t} h al día (${sched.start}–${sched.end} menos ${fmtDur(sched.breakMinutes * 60000)} de break)`;
+}
+
 function renderAjustes() {
   const st = state.settings;
+  const custom = !!st.customSchedule;
+  $('#set-custom').checked = custom;
+  $('#general-schedule').hidden = custom;
+  $('#custom-schedule').hidden = !custom;
   $('#set-start').value = st.workStart;
   $('#set-end').value = st.workEnd;
-  $('#target-hint').textContent = `Jornada diaria: ${fmtDur(dailyTarget(st))} h. Lo que trabajes por encima son horas extra; lo que falte queda pendiente de compensar.`;
-  const order = [1, 2, 3, 4, 5, 6, 0];
-  $('#set-days').innerHTML = order.map((d) => `
+  $('#set-break').value = st.breakMinutes ? st.breakMinutes : '';
+  $('#set-days').innerHTML = ORDER.map((d) => `
     <label class="day-toggle"><input type="checkbox" value="${d}" ${st.workDays.includes(d) ? 'checked' : ''}>
     <span>${WEEKDAYS[d].slice(0, 3)}</span></label>`).join('');
+  if (custom) {
+    $('#custom-schedule').innerHTML = ORDER.map((wd) => {
+      const d = st.days[wd];
+      return `<div class="cday ${d.work ? '' : 'off'}" data-wd="${wd}">
+        <div class="cday-head">
+          <label class="check"><input type="checkbox" data-f="work" ${d.work ? 'checked' : ''}> ${WEEKDAYS[wd]}</label>
+          <span class="cday-hours">${d.work ? `${fmtDur(scheduleTarget(d))} h` : 'Libre'}</span>
+        </div>
+        <div class="row three" ${d.work ? '' : 'hidden'}>
+          <label>Entrada <input type="time" data-f="start" value="${d.start}"></label>
+          <label>Salida <input type="time" data-f="end" value="${d.end}"></label>
+          <label>Break (min) <input type="number" data-f="breakMinutes" min="0" max="720" step="5" inputmode="numeric" placeholder="—" value="${d.breakMinutes || ''}"></label>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  const weekly = `Jornada semanal: ${fmtDur(weeklyTarget(st))} h.`;
+  $('#target-hint').textContent = custom
+    ? `${weekly} Lo que trabajes por encima de la jornada de cada día son horas extra; lo que falte queda pendiente de compensar.`
+    : `Jornada: ${targetText({ start: st.workStart, end: st.workEnd, breakMinutes: st.breakMinutes || 0 })}. ${weekly}`;
   const hol = [...st.holidays].sort();
   $('#hol-list').innerHTML = hol.length
     ? hol.map((k) => `<li>${fmtKey(k)} <button data-hol="${k}" aria-label="Quitar">✕</button></li>`).join('')
@@ -313,15 +347,38 @@ async function saveSettings(patch) {
 }
 
 function saveHours() {
-  const start = $('#set-start').value;
-  const end = $('#set-end').value;
-  if (!start || !end) return;
-  if (end <= start) {
-    toast('La hora de salida debe ser posterior a la de entrada');
+  const sched = { start: $('#set-start').value, end: $('#set-end').value, breakMinutes: breakValue($('#set-break').value) };
+  const error = validateSchedule(sched);
+  if (error) {
+    toast(error);
     renderAjustes();
     return;
   }
-  saveSettings({ workStart: start, workEnd: end });
+  saveSettings({ workStart: sched.start, workEnd: sched.end, breakMinutes: sched.breakMinutes });
+}
+
+function toggleCustom() {
+  const on = $('#set-custom').checked;
+  const st = state.settings;
+  // Al activarlo por primera vez se parte del horario general
+  saveSettings(on ? { customSchedule: true, days: st.days || generalDays(st) } : { customSchedule: false });
+  toast(on ? 'Horario personalizado activado: ajusta cada día' : 'Vuelves a usar el horario general');
+}
+
+function saveCustomDay(ev) {
+  const card = ev.target.closest('.cday');
+  if (!card) return;
+  const wd = Number(card.dataset.wd);
+  const get = (f) => card.querySelector(`[data-f="${f}"]`);
+  const day = { work: get('work').checked, start: get('start').value, end: get('end').value,
+    breakMinutes: breakValue(get('breakMinutes').value) };
+  const error = day.work ? validateSchedule(day) : null;
+  if (error) {
+    toast(`${WEEKDAYS[wd]}: ${error}`);
+    renderAjustes();
+    return;
+  }
+  saveSettings({ days: { ...state.settings.days, [wd]: day } });
 }
 
 async function storageStatus() {
@@ -490,6 +547,9 @@ function bind() {
 
   $('#set-start').addEventListener('change', saveHours);
   $('#set-end').addEventListener('change', saveHours);
+  $('#set-break').addEventListener('change', saveHours);
+  $('#set-custom').addEventListener('change', toggleCustom);
+  $('#custom-schedule').addEventListener('change', saveCustomDay);
   $('#set-days').addEventListener('change', () => {
     const days = [...document.querySelectorAll('#set-days input:checked')].map((i) => Number(i.value));
     saveSettings({ workDays: days });
