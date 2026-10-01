@@ -1,78 +1,127 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  DEFAULT_SETTINGS, zonedToUtc, zonedParts, computeDays, monthDays, sumDays,
-  spanishNationalHolidays, fmtDur, fromLocalInput, toLocalInput,
+  DEFAULT_SETTINGS, zonedToUtc, zonedParts, computeDays, dayStats, monthDays, sumDays,
+  spanishNationalHolidays, fmtDur, fromLocalInput, toLocalInput, workingDaysBetween, dailyTarget,
 } from '../js/calc.js';
 import { monthWorkbook, monthIcs } from '../js/report.js';
 
 const H = 3600000;
+const M = 60000;
 const st = { ...DEFAULT_SETTINGS };
 const at = (y, m, d, h, mi = 0) => zonedToUtc(y, m, d, h, mi);
 const sess = (id, a, b) => ({ id, start: a, end: b, source: 'button' });
+const day = (sessions, key, settings = st, now) => computeDays(sessions, settings, now).get(key);
 
 test('zonedToUtc respeta CET y CEST', () => {
   assert.equal(new Date(at(2026, 1, 15, 7)).toISOString(), '2026-01-15T06:00:00.000Z');
   assert.equal(new Date(at(2026, 7, 15, 7)).toISOString(), '2026-07-15T05:00:00.000Z');
-  assert.deepEqual(zonedParts(at(2026, 3, 29, 3, 30)).h, 3); // día del cambio de hora
+  assert.equal(zonedParts(at(2026, 3, 29, 3, 30)).h, 3); // día del cambio de hora
 });
 
-test('jornada normal 07:00–15:00 sin horas extra', () => {
-  const day = computeDays([sess('a', at(2026, 10, 1, 7), at(2026, 10, 1, 15))], st).get('2026-10-01');
-  assert.equal(day.worked, 8 * H);
-  assert.equal(day.outside, 0);
-  assert.equal(day.expected, 8 * H);
+test('jornada diaria = 8 h', () => {
+  assert.equal(dailyTarget(st), 8 * H);
 });
 
-test('salida a comer y vuelta por la tarde: lo de después de las 15:00 es extra', () => {
-  const day = computeDays([
+test('jornada normal 07:00–15:00: ni extra ni pendiente', () => {
+  const d = day([sess('a', at(2026, 10, 1, 7), at(2026, 10, 1, 15))], '2026-10-01');
+  assert.equal(d.worked, 8 * H);
+  assert.equal(d.overtime, 0);
+  assert.equal(d.pending, 0);
+});
+
+test('entrar tarde, parar a comer y volver: solo es extra lo que pasa de 8 h', () => {
+  // 07:56–13:00 (5:04) + 14:00–17:30 (3:30) = 8:34 → 0:34 extra, no 2:30
+  const list = [
+    sess('a', at(2026, 10, 1, 7, 56), at(2026, 10, 1, 13)),
+    sess('b', at(2026, 10, 1, 14), at(2026, 10, 1, 17, 30)),
+  ];
+  const d = day(list, '2026-10-01');
+  assert.equal(d.worked, 8 * H + 34 * M);
+  assert.equal(d.overtime, 34 * M);
+  assert.equal(d.pending, 0);
+  // el tramo extra es el final del día: desde que se completan las 8 h
+  assert.equal(d.extra.length, 1);
+  assert.equal(d.extra[0].start, at(2026, 10, 1, 16, 56));
+  assert.equal(d.extra[0].end, at(2026, 10, 1, 17, 30));
+});
+
+test('trabajar menos de 8 h deja horas pendientes de compensar', () => {
+  const d = day([sess('a', at(2026, 10, 1, 9), at(2026, 10, 1, 15))], '2026-10-01');
+  assert.equal(d.pending, 2 * H);
+  assert.equal(d.overtime, 0);
+  assert.equal(d.balance, -2 * H);
+});
+
+test('salida a comer + vuelta por la tarde con jornada completa', () => {
+  const d = day([
     sess('a', at(2026, 10, 1, 7), at(2026, 10, 1, 15)),
     sess('b', at(2026, 10, 1, 16), at(2026, 10, 1, 18, 30)),
-  ], st).get('2026-10-01');
-  assert.equal(day.worked, 10.5 * H);
-  assert.equal(day.outside, 2.5 * H);
-  assert.equal(day.extra.length, 1);
+  ], '2026-10-01');
+  assert.equal(d.overtime, 2.5 * H);
+  assert.equal(d.extra[0].start, at(2026, 10, 1, 16));
 });
 
-test('entrar antes de las 07:00 cuenta como extra', () => {
-  const day = computeDays([sess('a', at(2026, 10, 1, 6, 30), at(2026, 10, 1, 15))], st).get('2026-10-01');
-  assert.equal(day.outside, 0.5 * H);
-  assert.equal(day.inSchedule, 8 * H);
-});
-
-test('sábado y festivos: todo es extra', () => {
-  const sat = computeDays([sess('a', at(2026, 10, 3, 9), at(2026, 10, 3, 11))], st).get('2026-10-03');
-  assert.equal(sat.outside, 2 * H);
+test('sábado y festivos: todo es extra y no hay pendiente', () => {
+  const sat = day([sess('a', at(2026, 10, 3, 9), at(2026, 10, 3, 11))], '2026-10-03');
+  assert.equal(sat.overtime, 2 * H);
   assert.equal(sat.expected, 0);
   const hol = { ...st, holidays: ['2026-10-12'] };
-  const d = computeDays([sess('a', at(2026, 10, 12, 7), at(2026, 10, 12, 9))], hol).get('2026-10-12');
+  const d = day([sess('a', at(2026, 10, 12, 7), at(2026, 10, 12, 9))], '2026-10-12', hol);
   assert.equal(d.kind, 'Festivo');
-  assert.equal(d.outside, 2 * H);
+  assert.equal(d.overtime, 2 * H);
+});
+
+test('vacaciones: no se espera jornada y lo fichado es extra', () => {
+  const vac = { ...st, vacations: [{ id: 'v', from: '2026-10-05', to: '2026-10-09' }] };
+  const days = monthDays(2026, 10, [sess('a', at(2026, 10, 7, 10), at(2026, 10, 7, 11))], vac, at(2026, 10, 9, 20));
+  const byKey = Object.fromEntries(days.map((d) => [d.key, d]));
+  assert.equal(byKey['2026-10-06'].kind, 'Vacaciones');
+  assert.equal(byKey['2026-10-06'].expected, 0);
+  assert.equal(byKey['2026-10-06'].pending, 0);
+  assert.equal(byKey['2026-10-07'].overtime, 1 * H);
+  const tot = sumDays(days);
+  assert.equal(tot.vacationDays, 5);
+  assert.equal(tot.expected, 2 * 8 * H); // solo 1 y 2 de octubre (5–9 son vacaciones)
+  // un solo día de vacaciones
+  const one = { ...st, vacations: [{ id: 'v', from: '2026-10-02', to: '2026-10-02' }] };
+  assert.equal(dayStats('2026-10-02', [], one, at(2026, 10, 2, 20)).kind, 'Vacaciones');
+});
+
+test('días laborables de un periodo de vacaciones', () => {
+  assert.equal(workingDaysBetween('2026-10-05', '2026-10-18', st), 10);
+  assert.equal(workingDaysBetween('2026-10-03', '2026-10-03', st), 0);
+  assert.equal(workingDaysBetween('2026-10-12', '2026-10-13', { ...st, holidays: ['2026-10-12'] }), 1);
 });
 
 test('un fichaje que cruza medianoche se reparte entre los dos días', () => {
   const days = computeDays([sess('a', at(2026, 10, 1, 22), at(2026, 10, 2, 1))], st);
   assert.equal(days.get('2026-10-01').worked, 2 * H);
   assert.equal(days.get('2026-10-02').worked, 1 * H);
-  assert.equal(days.get('2026-10-02').outside, 1 * H);
 });
 
 test('fichaje abierto se cuenta hasta ahora', () => {
   const now = at(2026, 10, 1, 10);
-  const day = computeDays([sess('a', at(2026, 10, 1, 7), null)], st, now).get('2026-10-01');
-  assert.equal(day.worked, 3 * H);
+  const d = dayStats('2026-10-01', [sess('a', at(2026, 10, 1, 7), null)], st, now);
+  assert.equal(d.worked, 3 * H);
+  assert.equal(d.pending, 5 * H);
 });
 
 test('resumen mensual no cuenta días futuros', () => {
-  const now = at(2026, 10, 5, 12);
-  const days = monthDays(2026, 10, [], st, now);
+  const days = monthDays(2026, 10, [], st, at(2026, 10, 5, 12));
   assert.equal(days.length, 5);
-  assert.equal(sumDays(days).expected, 3 * 8 * H); // 1, 2 y 5 de octubre son laborables
+  assert.equal(sumDays(days).expected, 3 * 8 * H);
 });
 
 test('festivos nacionales incluyen Viernes Santo', () => {
   assert.ok(spanishNationalHolidays(2026).includes('2026-04-03'));
   assert.ok(spanishNationalHolidays(2027).includes('2027-03-26'));
+});
+
+test('los segundos no cuentan: se contabiliza por minutos', () => {
+  const d = day([sess('a', at(2026, 10, 1, 7) + 42000, at(2026, 10, 1, 15) + 59999)], '2026-10-01');
+  assert.equal(d.worked, 8 * H);
+  assert.equal(d.overtime, 0);
 });
 
 test('formatos', () => {
@@ -81,7 +130,7 @@ test('formatos', () => {
   assert.equal(toLocalInput(fromLocalInput('2026-10-01T16:05')), '2026-10-01T16:05');
 });
 
-test('genera un .xlsx (zip) y un .ics', () => {
+test('genera un .xlsx (zip) y un .ics con el tramo extra correcto', () => {
   const list = [
     sess('a', at(2026, 10, 1, 7), at(2026, 10, 1, 15)),
     sess('b', at(2026, 10, 1, 16), at(2026, 10, 1, 18)),
