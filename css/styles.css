@@ -121,7 +121,7 @@ h2 { font-size: 1rem; margin: 0 0 12px; }
 .toolbar { display: flex; gap: 8px; margin-bottom: 12px; }
 .toolbar input { flex: 1; }
 
-input[type="month"], input[type="date"], input[type="time"], input[type="datetime-local"], input[type="text"] {
+input[type="month"], input[type="date"], input[type="time"], input[type="datetime-local"], input[type="text"], input[type="number"] {
   font: inherit;
   color: var(--text);
   background: var(--card);
@@ -289,3 +289,21 @@ input:disabled { opacity: .45; }
 .row input, dialog input { min-width: 0; max-width: 100%; }
 dialog .row { gap: 8px; }
 dialog input[type="date"] { padding: 10px 8px; }
+
+.row.three { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.row.three input { padding: 10px 8px; }
+.switch { margin: 16px 0 4px; padding-top: 12px; border-top: 1px solid var(--border); font-weight: 600; }
+.target {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  font-size: .9rem;
+}
+.custom { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.cday { border: 1px solid var(--border); border-radius: 12px; padding: 10px; }
+.cday.off { opacity: .7; }
+.cday-head { display: flex; justify-content: space-between; align-items: center; }
+.cday-head .check { font-weight: 600; }
+.cday-hours { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--primary); }
+.cday .row.three { margin-top: 8px; }

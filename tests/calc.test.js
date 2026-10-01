@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DEFAULT_SETTINGS, zonedToUtc, zonedParts, computeDays, dayStats, monthDays, sumDays,
-  spanishNationalHolidays, fmtDur, fromLocalInput, toLocalInput, workingDaysBetween, dailyTarget,
+  spanishNationalHolidays, fmtDur, fromLocalInput, toLocalInput, workingDaysBetween, dailyTarget, weeklyTarget, validateSchedule,
 } from '../js/calc.js';
 import { monthWorkbook, monthIcs } from '../js/report.js';
 
@@ -141,4 +141,56 @@ test('genera un .xlsx (zip) y un .ics con el tramo extra correcto', () => {
   const ics = monthIcs(2026, 10, list, st, at(2026, 10, 2, 12));
   assert.match(ics, /DTSTART:20261001T140000Z/);
   assert.match(ics, /SUMMARY:Horas extra \(2:00\)/);
+});
+
+test('break: la jornada es el horario menos el break', () => {
+  const partida = { ...st, workStart: '08:00', workEnd: '17:00', breakMinutes: 60 };
+  assert.equal(dailyTarget(partida), 8 * H);
+  const dosHoras = { ...st, workStart: '09:00', workEnd: '19:00', breakMinutes: 120 };
+  assert.equal(dailyTarget(dosHoras), 8 * H);
+  const media = { ...st, workStart: '08:00', workEnd: '16:00', breakMinutes: 30 };
+  assert.equal(dailyTarget(media), 7.5 * H);
+  // jornada partida 08:00–13:00 y 14:00–17:30 con 1 h de break: 8:30 trabajadas → 0:30 extra
+  const d = day([
+    sess('a', at(2026, 10, 1, 8), at(2026, 10, 1, 13)),
+    sess('b', at(2026, 10, 1, 14), at(2026, 10, 1, 17, 30)),
+  ], '2026-10-01', partida);
+  assert.equal(d.expected, 8 * H);
+  assert.equal(d.overtime, 30 * M);
+});
+
+test('horario personalizado por día', () => {
+  const custom = {
+    ...st,
+    customSchedule: true,
+    days: {
+      0: { work: false, start: '07:00', end: '15:00', breakMinutes: 0 },
+      1: { work: true, start: '08:00', end: '18:00', breakMinutes: 120 }, // 8 h
+      2: { work: true, start: '08:00', end: '17:00', breakMinutes: 60 }, // 8 h
+      3: { work: true, start: '08:00', end: '17:00', breakMinutes: 60 },
+      4: { work: true, start: '08:00', end: '17:00', breakMinutes: 60 },
+      5: { work: true, start: '08:00', end: '14:00', breakMinutes: 0 }, // viernes intensivo 6 h
+      6: { work: true, start: '10:00', end: '14:00', breakMinutes: 0 }, // sábado 4 h
+    },
+  };
+  assert.equal(dailyTarget(custom, 5), 6 * H);
+  assert.equal(weeklyTarget(custom), 42 * H);
+  // viernes 2/10/2026: 08:00–14:30 → 0:30 extra
+  const fri = day([sess('a', at(2026, 10, 2, 8), at(2026, 10, 2, 14, 30))], '2026-10-02', custom);
+  assert.equal(fri.expected, 6 * H);
+  assert.equal(fri.overtime, 30 * M);
+  // sábado laborable en este horario: no todo es extra
+  const sat = day([sess('a', at(2026, 10, 3, 10), at(2026, 10, 3, 13))], '2026-10-03', custom);
+  assert.equal(sat.kind, 'Laborable');
+  assert.equal(sat.pending, 1 * H);
+  // domingo libre
+  assert.equal(day([sess('a', at(2026, 10, 4, 10), at(2026, 10, 4, 11))], '2026-10-04', custom).overtime, 1 * H);
+  // al desactivarlo se vuelve al horario general sin perder el personalizado
+  assert.equal(dailyTarget({ ...custom, customSchedule: false }, 5), 8 * H);
+});
+
+test('validación del horario', () => {
+  assert.equal(validateSchedule({ start: '08:00', end: '17:00', breakMinutes: 60 }), null);
+  assert.match(validateSchedule({ start: '15:00', end: '07:00', breakMinutes: 0 }), /posterior/);
+  assert.match(validateSchedule({ start: '08:00', end: '09:00', breakMinutes: 60 }), /break/);
 });
