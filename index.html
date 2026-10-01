@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1f4e79">
+  <meta name="description" content="Registro personal de jornada (clock in / clock out) con informes mensuales en Excel.">
+  <title>Fichajes</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Fichajes</h1>
+    <button id="install-btn" class="chip" hidden>Instalar app</button>
+  </header>
+
+  <main>
+    <!-- FICHAR -->
+    <section id="view-fichar" class="view active">
+      <div class="clock">
+        <div id="clock-time" class="clock-time">--:--:--</div>
+        <div id="clock-date" class="clock-date"></div>
+      </div>
+
+      <div id="status-card" class="card status">
+        <div id="status-text" class="status-text">Cargando…</div>
+        <div id="status-timer" class="status-timer"></div>
+      </div>
+
+      <div class="punch">
+        <button id="btn-in" class="punch-btn in" disabled>
+          <span class="punch-icon">▶</span>Clock in
+        </button>
+        <button id="btn-out" class="punch-btn out" disabled>
+          <span class="punch-icon">■</span>Clock out
+        </button>
+      </div>
+      <p id="schedule-hint" class="hint"></p>
+
+      <div class="card">
+        <h2>Hoy</h2>
+        <div class="stats">
+          <div><span id="today-worked">0:00</span><small>Trabajado</small></div>
+          <div><span id="today-in">0:00</span><small>En horario</small></div>
+          <div><span id="today-extra" class="extra">0:00</span><small>Horas extra</small></div>
+        </div>
+        <ul id="today-list" class="sessions"></ul>
+      </div>
+    </section>
+
+    <!-- HISTORIAL -->
+    <section id="view-historial" class="view">
+      <div class="toolbar">
+        <input type="month" id="hist-month" aria-label="Mes">
+        <button id="add-manual" class="btn">+ Añadir</button>
+      </div>
+      <div class="card stats-card">
+        <div class="stats">
+          <div><span id="hist-worked">0:00</span><small>Trabajado</small></div>
+          <div><span id="hist-expected">0:00</span><small>Teórico</small></div>
+          <div><span id="hist-extra" class="extra">0:00</span><small>Horas extra</small></div>
+        </div>
+      </div>
+      <div id="hist-list"></div>
+    </section>
+
+    <!-- INFORMES -->
+    <section id="view-informes" class="view">
+      <div class="toolbar">
+        <input type="month" id="rep-month" aria-label="Mes del informe">
+      </div>
+      <div class="card">
+        <h2 id="rep-title">Informe</h2>
+        <dl class="summary">
+          <dt>Horas trabajadas</dt><dd id="rep-worked">0:00</dd>
+          <dt>Jornada teórica</dt><dd id="rep-expected">0:00</dd>
+          <dt>Dentro de horario</dt><dd id="rep-in">0:00</dd>
+          <dt>Horas extra</dt><dd id="rep-extra" class="extra">0:00</dd>
+          <dt>Balance</dt><dd id="rep-balance">0:00</dd>
+          <dt>Días con fichajes</dt><dd id="rep-days">0</dd>
+        </dl>
+      </div>
+      <div class="actions">
+        <button id="rep-xlsx" class="btn primary">Descargar Excel (.xlsx)</button>
+        <button id="rep-share" class="btn" hidden>Compartir Excel…</button>
+        <button id="rep-ics" class="btn">Horas extra para calendario (.ics)</button>
+      </div>
+      <p class="hint">El Excel incluye 4 hojas: Resumen, Diario, Fichajes y Horas extra (con los tramos
+        exactos para pasarlos al calendario de la empresa).</p>
+    </section>
+
+    <!-- AJUSTES -->
+    <section id="view-ajustes" class="view">
+      <div class="card">
+        <h2>Horario laboral (hora de Madrid)</h2>
+        <div class="row">
+          <label>Entrada <input type="time" id="set-start"></label>
+          <label>Salida <input type="time" id="set-end"></label>
+        </div>
+        <div id="set-days" class="days"></div>
+      </div>
+
+      <div class="card">
+        <h2>Festivos y vacaciones</h2>
+        <p class="hint">En estos días todo lo trabajado cuenta como horas extra.</p>
+        <div class="row">
+          <input type="date" id="hol-date" aria-label="Fecha">
+          <button id="hol-add" class="btn">Añadir</button>
+        </div>
+        <button id="hol-national" class="btn small">+ Festivos nacionales del año</button>
+        <ul id="hol-list" class="chips"></ul>
+      </div>
+
+      <div class="card">
+        <h2>Copia de seguridad</h2>
+        <p class="hint">Los fichajes se guardan solo en este móvil. Haz una copia de vez en cuando
+          (por ejemplo, a Google Drive) para no perderlos si borras los datos del navegador.</p>
+        <div class="actions">
+          <button id="backup-export" class="btn">Exportar copia (.json)</button>
+          <label class="btn">Importar copia<input type="file" id="backup-import" accept="application/json,.json" hidden></label>
+        </div>
+        <p id="storage-status" class="hint"></p>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabs">
+    <button data-view="fichar" class="active"><span>⏱</span>Fichar</button>
+    <button data-view="historial"><span>📅</span>Historial</button>
+    <button data-view="informes"><span>📊</span>Informes</button>
+    <button data-view="ajustes"><span>⚙</span>Ajustes</button>
+  </nav>
+
+  <dialog id="edit-dialog">
+    <form method="dialog" id="edit-form">
+      <h2 id="edit-title">Editar fichaje</h2>
+      <label>Entrada <input type="datetime-local" id="edit-start" required></label>
+      <label>Salida <input type="datetime-local" id="edit-end"></label>
+      <label>Nota <input type="text" id="edit-note" maxlength="200" placeholder="Opcional"></label>
+      <p id="edit-error" class="error"></p>
+      <div class="dialog-actions">
+        <button type="button" id="edit-delete" class="btn danger">Eliminar</button>
+        <span class="spacer"></span>
+        <button type="button" id="edit-cancel" class="btn">Cancelar</button>
+        <button type="submit" id="edit-save" class="btn primary">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
