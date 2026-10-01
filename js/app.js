@@ -1,13 +1,14 @@
 import * as db from './db.js';
 import {
-  DEFAULT_SETTINGS, WEEKDAYS, MONTHS, computeDays, monthDays, sumDays, dayKey, zonedParts,
-  isWorkday, workWindow, fmtTime, fmtDur, fmtKey, toLocalInput, fromLocalInput,
-  spanishNationalHolidays,
+  DEFAULT_SETTINGS, WEEKDAYS, MONTHS, monthDays, sumDays, dayStats, dayKey, zonedParts,
+  zonedToUtc, dailyTarget, floorMinute, workingDaysBetween, fmtTime, fmtDur, fmtKey, toLocalInput,
+  fromLocalInput, spanishNationalHolidays,
 } from './calc.js';
 import { monthWorkbook, monthIcs, monthFileName } from './report.js';
 
 const $ = (sel) => document.querySelector(sel);
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const pad = (n) => String(n).padStart(2, '0');
 
 const state = {
   sessions: [],
@@ -24,21 +25,31 @@ function toast(msg) {
   el.textContent = msg;
   el.classList.add('show');
   clearTimeout(toast.t);
-  toast.t = setTimeout(() => el.classList.remove('show'), 2500);
+  toast.t = setTimeout(() => el.classList.remove('show'), 2800);
 }
 
 function esc(s) {
   return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
 
+function todayKey() {
+  return dayKey(Date.now());
+}
+
 function currentMonthValue() {
   const p = zonedParts(Date.now());
-  return `${p.y}-${String(p.m).padStart(2, '0')}`;
+  return `${p.y}-${pad(p.m)}`;
 }
 
 function parseMonth(value) {
   const [y, m] = (value || currentMonthValue()).split('-').map(Number);
   return { y, m };
+}
+
+/** Fichajes que se solapan con el intervalo [a, b). */
+function overlapping(a, b, exceptId) {
+  const now = Date.now();
+  return state.sessions.find((s) => s.id !== exceptId && a < (s.end ?? now) && b > s.start);
 }
 
 async function reload() {
@@ -50,7 +61,7 @@ async function reload() {
 
 async function clockIn() {
   if (openSession()) return;
-  const s = { id: newId(), start: Date.now(), end: null, note: '', source: 'button', createdAt: Date.now() };
+  const s = { id: newId(), start: floorMinute(Date.now()), end: null, note: '', source: 'button', createdAt: Date.now() };
   await db.putSession(s);
   navigator.vibrate?.(60);
   toast(`Clock in a las ${fmtTime(s.start)}`);
@@ -60,32 +71,44 @@ async function clockIn() {
 async function clockOut() {
   const s = openSession();
   if (!s) return;
-  s.end = Date.now();
-  s.updatedAt = s.end;
-  await db.putSession(s);
+  s.end = floorMinute(Date.now());
+  s.updatedAt = Date.now();
+  if (s.end <= floorMinute(s.start)) {
+    // Entrada y salida en el mismo minuto: se descarta el fichaje vacío
+    await db.deleteSession(s.id);
+    toast('Fichaje de menos de un minuto descartado');
+  } else {
+    await db.putSession(s);
+    toast(`Clock out a las ${fmtTime(s.end)} · ${fmtDur(s.end - s.start)}`);
+  }
   navigator.vibrate?.([40, 60, 40]);
-  toast(`Clock out a las ${fmtTime(s.end)} · ${fmtDur(s.end - s.start)}`);
   await reload();
 }
 
-function scheduleHint(now) {
-  const p = zonedParts(now);
+function scheduleHint(now, today, open) {
   const st = state.settings;
-  if (!isWorkday(p.y, p.m, p.d, st)) return 'Hoy no es laborable: todo lo que fiches contará como horas extra.';
-  const [ws, we] = workWindow(p.y, p.m, p.d, st);
-  if (now < ws) return `Tu jornada empieza a las ${st.workStart}. Lo fichado antes contará como horas extra.`;
-  if (now >= we) return `Tu jornada terminó a las ${st.workEnd}. Lo fichado ahora contará como horas extra.`;
-  return `Jornada de hoy: ${st.workStart}–${st.workEnd}.`;
+  const target = fmtDur(dailyTarget(st));
+  if (!today.workday) {
+    return `Hoy: ${today.kind.toLowerCase()}. No se espera jornada; todo lo que fiches cuenta como horas extra.`;
+  }
+  if (today.worked === 0) return `Jornada de hoy: ${target} h (horario habitual ${st.workStart}–${st.workEnd}).`;
+  if (today.pending > 0) {
+    return open
+      ? `Completas tus ${target} h a las ${fmtTime(now + today.pending)}. A partir de ahí, horas extra.`
+      : `Te faltan ${fmtDur(today.pending)} para completar la jornada de ${target} h.`;
+  }
+  return `Jornada de ${target} h completada${today.overtime ? ` · +${fmtDur(today.overtime)} extra` : ''}.`
+    + (open ? ' Todo lo que sigas trabajando es extra.' : '');
 }
 
-function sessionItem(seg, { showDate = false } = {}) {
+function sessionItem(seg) {
   const s = seg.session;
   const end = seg.open ? '<em>en curso</em>' : fmtTime(seg.end);
   const tag = s.source === 'manual' ? '<span class="tag">manual</span>' : '';
   const note = s.note ? `<div class="note">${esc(s.note)}</div>` : '';
   return `<li data-id="${s.id}">
     <div class="sess-main">
-      <span>${showDate ? fmtKey(seg.key) + ' · ' : ''}${fmtTime(seg.start)} → ${end}</span>
+      <span>${fmtTime(seg.start)} → ${end}</span>
       <strong>${fmtDur(seg.end - seg.start)}</strong>
     </div>${tag}${note}</li>`;
 }
@@ -93,42 +116,143 @@ function sessionItem(seg, { showDate = false } = {}) {
 function renderFichar() {
   const now = Date.now();
   const p = zonedParts(now);
-  $('#clock-time').textContent = `${String(p.h).padStart(2, '0')}:${String(p.mi).padStart(2, '0')}:${String(p.s).padStart(2, '0')}`;
+  $('#clock-time').textContent = `${pad(p.h)}:${pad(p.mi)}:${pad(p.s)}`;
   $('#clock-date').textContent = `${WEEKDAYS[new Date(Date.UTC(p.y, p.m - 1, p.d)).getUTCDay()]}, ${p.d} de ${MONTHS[p.m - 1].toLowerCase()} de ${p.y}`;
 
+  const key = dayKey(now);
+  const today = dayStats(key, state.sessions, state.settings, now);
   const open = openSession();
   $('#btn-in').disabled = !!open;
   $('#btn-out').disabled = !open;
   $('#status-card').classList.toggle('working', !!open);
-  $('#status-text').textContent = open ? `Trabajando desde las ${fmtTime(open.start)}` : 'Fuera de turno';
-  $('#status-timer').textContent = open ? fmtDur(now - open.start) : '';
-  $('#schedule-hint').textContent = scheduleHint(now);
+  $('#status-card').classList.toggle('vacation', !open && today.kind === 'Vacaciones');
+  const openOtherDay = open && dayKey(open.start) !== key;
+  $('#status-text').textContent = open
+    ? `Trabajando desde las ${fmtTime(open.start)}${openOtherDay ? ` del ${fmtKey(dayKey(open.start))}` : ''}`
+    : (today.kind === 'Vacaciones' ? 'De vacaciones 🏖' : 'Fuera de turno');
+  $('#status-timer').textContent = open ? fmtDur(floorMinute(now) - floorMinute(open.start)) : '';
+  const warn = $('#status-warn');
+  warn.hidden = !openOtherDay;
+  if (openOtherDay) {
+    warn.textContent = '⚠ Este fichaje sigue abierto desde otro día. Si olvidaste hacer clock out, toca aquí para corregir la hora de salida.';
+  }
+  $('#schedule-hint').textContent = scheduleHint(now, today, open);
+  $('#late-btn').textContent = open ? '🕘 Clock out con otra hora' : '🕘 Clock in con otra hora';
 
-  const today = computeDays(state.sessions, state.settings, now).get(dayKey(now));
-  $('#today-worked').textContent = fmtDur(today?.worked || 0);
-  $('#today-in').textContent = fmtDur(today?.inSchedule || 0);
-  $('#today-extra').textContent = fmtDur(today?.outside || 0);
-  const list = today?.segments || [];
-  $('#today-list').innerHTML = list.length
-    ? list.map((seg) => sessionItem(seg)).join('')
+  $('#today-worked').textContent = fmtDur(today.worked);
+  $('#today-pending').textContent = fmtDur(today.pending);
+  $('#today-extra').textContent = fmtDur(today.overtime);
+  $('#today-list').innerHTML = today.segments.length
+    ? today.segments.map((seg) => sessionItem(seg)).join('')
     : '<li class="empty">Sin fichajes hoy</li>';
+}
+
+// ---------- Fichar con otra hora (hoy) ----------
+
+function openLate() {
+  const open = openSession();
+  const now = Date.now();
+  const p = zonedParts(now);
+  $('#late-title').textContent = open ? 'Clock out con otra hora' : 'Clock in con otra hora';
+  $('#late-text').textContent = open
+    ? `Indica a qué hora dejaste de trabajar hoy (entrada a las ${fmtTime(open.start)}).`
+    : 'Indica a qué hora empezaste a trabajar hoy (por ejemplo 07:56). Quedarás fichado como trabajando desde esa hora.';
+  $('#late-label').textContent = open ? 'Hora de salida' : 'Hora de entrada';
+  $('#late-time').value = !open && dayStats(dayKey(now), state.sessions, state.settings, now).segments.length === 0
+    ? state.settings.workStart
+    : `${pad(p.h)}:${pad(p.mi)}`;
+  $('#late-error').textContent = '';
+  $('#late-dialog').showModal();
+}
+
+async function saveLate(ev) {
+  ev.preventDefault();
+  const err = (msg) => { $('#late-error').textContent = msg; };
+  const now = Date.now();
+  const p = zonedParts(now);
+  const [h, mi] = $('#late-time').value.split(':').map(Number);
+  if (!Number.isFinite(h)) return err('Indica una hora.');
+  const t = zonedToUtc(p.y, p.m, p.d, h, mi);
+  if (t > now) return err('La hora no puede ser posterior a la actual.');
+  const open = openSession();
+  if (open) {
+    if (t <= open.start) return err(`La salida debe ser posterior a la entrada (${fmtTime(open.start)}).`);
+    await db.putSession({ ...open, end: t, updatedAt: now });
+    toast(`Clock out a las ${fmtTime(t)} · ${fmtDur(t - open.start)}`);
+  } else {
+    const clash = overlapping(t, now);
+    if (clash) {
+      return err(`Se solapa con el fichaje ${fmtTime(clash.start)}–${fmtTime(clash.end)}. Elige una hora posterior a las ${fmtTime(clash.end)}.`);
+    }
+    await db.putSession({ id: newId(), start: t, end: null, note: '', source: 'manual', createdAt: now });
+    toast(`Clock in a las ${fmtTime(t)}`);
+  }
+  navigator.vibrate?.(60);
+  $('#late-dialog').close();
+  await reload();
+}
+
+// ---------- Vacaciones ----------
+
+function renderVacations() {
+  const list = [...(state.settings.vacations || [])].sort((a, b) => b.from.localeCompare(a.from));
+  const today = todayKey();
+  $('#vac-list').innerHTML = list.length ? list.map((v) => {
+    const n = workingDaysBetween(v.from, v.to, state.settings);
+    const range = v.from === v.to ? fmtKey(v.from) : `${fmtKey(v.from)} – ${fmtKey(v.to)}`;
+    return `<li class="${v.to < today ? 'past' : ''}"><div>${range}
+      <small>${n} día${n === 1 ? '' : 's'} laborable${n === 1 ? '' : 's'}</small></div>
+      <button type="button" data-vac="${v.id}" aria-label="Eliminar">✕</button></li>`;
+  }).join('') : '<li class="empty">No hay vacaciones registradas</li>';
+}
+
+function openVacations() {
+  const t = todayKey();
+  $('#vac-from').value = t;
+  $('#vac-to').value = t;
+  $('#vac-error').textContent = '';
+  renderVacations();
+  $('#vac-dialog').showModal();
+}
+
+async function addVacation(ev) {
+  ev.preventDefault();
+  const from = $('#vac-from').value;
+  const to = $('#vac-to').value || from;
+  const err = (msg) => { $('#vac-error').textContent = msg; };
+  if (!from) return err('Indica la fecha de inicio.');
+  if (to < from) return err('La fecha de fin no puede ser anterior a la de inicio.');
+  const clash = (state.settings.vacations || []).find((v) => from <= v.to && to >= v.from);
+  if (clash) return err(`Se solapa con las vacaciones del ${fmtKey(clash.from)} al ${fmtKey(clash.to)}.`);
+  const n = workingDaysBetween(from, to, state.settings);
+  await saveSettings({ vacations: [...(state.settings.vacations || []), { id: newId(), from, to }] });
+  err('');
+  renderVacations();
+  toast(`Vacaciones añadidas: ${n} día${n === 1 ? '' : 's'} laborable${n === 1 ? '' : 's'}`);
+}
+
+async function removeVacation(id) {
+  const v = state.settings.vacations.find((x) => x.id === id);
+  if (!v || !confirm(`¿Eliminar las vacaciones ${v.from === v.to ? `del ${fmtKey(v.from)}` : `del ${fmtKey(v.from)} al ${fmtKey(v.to)}`}?`)) return;
+  await saveSettings({ vacations: state.settings.vacations.filter((x) => x.id !== id) });
+  renderVacations();
 }
 
 // ---------- Historial ----------
 
 function renderHistorial() {
   const { y, m } = parseMonth($('#hist-month').value);
-  const days = monthDays(y, m, state.sessions, state.settings).filter((d) => d.segments.length);
   const all = monthDays(y, m, state.sessions, state.settings);
   const tot = sumDays(all);
   $('#hist-worked').textContent = fmtDur(tot.worked);
-  $('#hist-expected').textContent = fmtDur(tot.expected);
-  $('#hist-extra').textContent = fmtDur(tot.outside);
-  $('#hist-list').innerHTML = days.length ? days.reverse().map((d) => `
+  $('#hist-extra').textContent = fmtDur(tot.overtime);
+  $('#hist-pending').textContent = fmtDur(tot.pending);
+  const days = all.filter((d) => d.segments.length).reverse();
+  $('#hist-list').innerHTML = days.length ? days.map((d) => `
     <div class="card day">
       <div class="day-head">
         <div><strong>${WEEKDAYS[d.weekday]} ${d.d}</strong> <span class="muted">${d.kind !== 'Laborable' ? d.kind : ''}</span></div>
-        <div class="day-tot">${fmtDur(d.worked)}${d.outside ? ` <span class="extra">+${fmtDur(d.outside)} extra</span>` : ''}</div>
+        <div class="day-tot">${fmtDur(d.worked)}${d.overtime ? ` <span class="extra">+${fmtDur(d.overtime)}</span>` : ''}${d.pending ? ` <span class="pending">−${fmtDur(d.pending)}</span>` : ''}</div>
       </div>
       <ul class="sessions">${d.segments.map((seg) => sessionItem(seg)).join('')}</ul>
     </div>`).join('') : '<p class="empty">No hay fichajes este mes.</p>';
@@ -138,15 +262,15 @@ function renderHistorial() {
 
 function renderInformes() {
   const { y, m } = parseMonth($('#rep-month').value);
-  const days = monthDays(y, m, state.sessions, state.settings);
-  const tot = sumDays(days);
+  const tot = sumDays(monthDays(y, m, state.sessions, state.settings));
   $('#rep-title').textContent = `${MONTHS[m - 1]} ${y}`;
   $('#rep-worked').textContent = fmtDur(tot.worked);
   $('#rep-expected').textContent = fmtDur(tot.expected);
-  $('#rep-in').textContent = fmtDur(tot.inSchedule);
-  $('#rep-extra').textContent = fmtDur(tot.outside);
+  $('#rep-extra').textContent = fmtDur(tot.overtime);
+  $('#rep-pending').textContent = fmtDur(tot.pending);
   $('#rep-balance').textContent = (tot.balance > 0 ? '+' : '') + fmtDur(tot.balance);
-  $('#rep-days').textContent = days.filter((d) => d.segments.length).length;
+  $('#rep-days').textContent = tot.workedDays;
+  $('#rep-vac').textContent = tot.vacationDays;
 }
 
 function download(data, name, type) {
@@ -171,6 +295,7 @@ function renderAjustes() {
   const st = state.settings;
   $('#set-start').value = st.workStart;
   $('#set-end').value = st.workEnd;
+  $('#target-hint').textContent = `Jornada diaria: ${fmtDur(dailyTarget(st))} h. Lo que trabajes por encima son horas extra; lo que falte queda pendiente de compensar.`;
   const order = [1, 2, 3, 4, 5, 6, 0];
   $('#set-days').innerHTML = order.map((d) => `
     <label class="day-toggle"><input type="checkbox" value="${d}" ${st.workDays.includes(d) ? 'checked' : ''}>
@@ -187,6 +312,18 @@ async function saveSettings(patch) {
   render();
 }
 
+function saveHours() {
+  const start = $('#set-start').value;
+  const end = $('#set-end').value;
+  if (!start || !end) return;
+  if (end <= start) {
+    toast('La hora de salida debe ser posterior a la de entrada');
+    renderAjustes();
+    return;
+  }
+  saveSettings({ workStart: start, workEnd: end });
+}
+
 async function storageStatus() {
   const el = $('#storage-status');
   const persisted = await navigator.storage?.persisted?.();
@@ -197,35 +334,46 @@ async function storageStatus() {
 
 // ---------- Edición ----------
 
+function syncOpenCheckbox() {
+  $('#edit-end').disabled = $('#edit-open').checked;
+}
+
 function openEditor(session) {
   state.editing = session || null;
   const now = Date.now();
   $('#edit-title').textContent = session ? 'Editar fichaje' : 'Añadir fichaje manual';
   $('#edit-start').value = toLocalInput(session ? session.start : now - 3600000);
-  $('#edit-end').value = session ? (session.end ? toLocalInput(session.end) : '') : toLocalInput(now);
+  $('#edit-end').value = toLocalInput(session?.end ?? now);
+  $('#edit-open').checked = !!session && session.end == null;
   $('#edit-note').value = session?.note || '';
   $('#edit-delete').hidden = !session;
   $('#edit-error').textContent = '';
+  syncOpenCheckbox();
   $('#edit-dialog').showModal();
 }
 
 async function saveEdit(ev) {
   ev.preventDefault();
-  const start = fromLocalInput($('#edit-start').value);
-  const endVal = $('#edit-end').value;
-  const end = endVal ? fromLocalInput(endVal) : null;
-  const id = state.editing?.id;
   const err = (msg) => { $('#edit-error').textContent = msg; };
+  const now = Date.now();
+  if (!$('#edit-start').value) return err('Indica la hora de entrada.');
+  const start = fromLocalInput($('#edit-start').value);
+  const stillOpen = $('#edit-open').checked;
+  if (!stillOpen && !$('#edit-end').value) return err('Indica la hora de salida o marca «Sigo trabajando».');
+  const end = stillOpen ? null : fromLocalInput($('#edit-end').value);
+  const id = state.editing?.id;
+  if (start > now) return err('La entrada no puede ser posterior a la hora actual.');
   if (end != null && end <= start) return err('La salida debe ser posterior a la entrada.');
   if (end == null && state.sessions.some((s) => s.end == null && s.id !== id)) {
-    return err('Ya hay un fichaje abierto. Indica la hora de salida.');
+    return err('Ya hay otro fichaje abierto. Ciérralo antes o indica la hora de salida.');
   }
-  const overlap = state.sessions.find((s) => s.id !== id
-    && start < (s.end ?? Date.now()) && (end ?? Date.now()) > s.start);
-  if (overlap) return err(`Se solapa con otro fichaje (${fmtKey(dayKey(overlap.start))} ${fmtTime(overlap.start)}).`);
+  const clash = overlapping(start, end ?? now, id);
+  if (clash) {
+    return err(`Se solapa con otro fichaje (${fmtKey(dayKey(clash.start))} ${fmtTime(clash.start)}–${clash.end ? fmtTime(clash.end) : 'en curso'}).`);
+  }
   const s = state.editing
-    ? { ...state.editing, start, end, note: $('#edit-note').value.trim(), updatedAt: Date.now() }
-    : { id: newId(), start, end, note: $('#edit-note').value.trim(), source: 'manual', createdAt: Date.now() };
+    ? { ...state.editing, start, end, note: $('#edit-note').value.trim(), updatedAt: now }
+    : { id: newId(), start, end, note: $('#edit-note').value.trim(), source: 'manual', createdAt: now };
   await db.putSession(s);
   $('#edit-dialog').close();
   toast('Fichaje guardado');
@@ -243,10 +391,9 @@ async function deleteEdit() {
 // ---------- Copia de seguridad ----------
 
 function exportBackup() {
-  const data = { app: 'fichajes', version: 1, exportedAt: new Date().toISOString(),
+  const data = { app: 'fichajes', version: 2, exportedAt: new Date().toISOString(),
     settings: state.settings, sessions: state.sessions };
-  const p = zonedParts(Date.now());
-  download(JSON.stringify(data, null, 2), `fichajes_backup_${p.y}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}.json`, 'application/json');
+  download(JSON.stringify(data, null, 2), `fichajes_backup_${todayKey()}.json`, 'application/json');
 }
 
 async function importBackup(file) {
@@ -257,7 +404,7 @@ async function importBackup(file) {
       && (s.end == null || (Number.isFinite(s.end) && s.end > s.start)));
     const existing = new Set(state.sessions.map((s) => s.id));
     const added = valid.filter((s) => !existing.has(s.id)).length;
-    if (!confirm(`Importar ${valid.length} fichajes (${added} nuevos)? Los que ya existan se sobrescribirán.`)) return;
+    if (!confirm(`¿Importar ${valid.length} fichajes (${added} nuevos)? Los que ya existan se sobrescribirán.`)) return;
     await db.putSessions(valid);
     if (data.settings) await db.setMeta('settings', { ...DEFAULT_SETTINGS, ...data.settings });
     await init(false);
@@ -295,13 +442,31 @@ function bind() {
   };
   $('#today-list').addEventListener('click', onSessionClick);
   $('#hist-list').addEventListener('click', onSessionClick);
+  $('#status-warn').addEventListener('click', () => openSession() && openEditor(openSession()));
   $('#add-manual').addEventListener('click', () => openEditor(null));
   $('#hist-month').addEventListener('change', renderHistorial);
   $('#rep-month').addEventListener('change', renderInformes);
 
   $('#edit-form').addEventListener('submit', saveEdit);
+  $('#edit-open').addEventListener('change', syncOpenCheckbox);
   $('#edit-cancel').addEventListener('click', () => $('#edit-dialog').close());
   $('#edit-delete').addEventListener('click', deleteEdit);
+
+  $('#late-btn').addEventListener('click', openLate);
+  $('#late-form').addEventListener('submit', saveLate);
+  $('#late-cancel').addEventListener('click', () => $('#late-dialog').close());
+
+  $('#vac-btn').addEventListener('click', openVacations);
+  $('#vac-form').addEventListener('submit', addVacation);
+  $('#vac-close').addEventListener('click', () => $('#vac-dialog').close());
+  $('#vac-from').addEventListener('change', () => {
+    const from = $('#vac-from').value;
+    if (from && (!$('#vac-to').value || $('#vac-to').value < from)) $('#vac-to').value = from;
+  });
+  $('#vac-list').addEventListener('click', (e) => {
+    const id = e.target.closest('button[data-vac]')?.dataset.vac;
+    if (id) removeVacation(id);
+  });
 
   $('#rep-xlsx').addEventListener('click', () => {
     const { name, data } = reportXlsx();
@@ -323,8 +488,8 @@ function bind() {
     download(monthIcs(y, m, state.sessions, state.settings), monthFileName(y, m, 'ics'), 'text/calendar');
   });
 
-  $('#set-start').addEventListener('change', (e) => e.target.value && saveSettings({ workStart: e.target.value }));
-  $('#set-end').addEventListener('change', (e) => e.target.value && saveSettings({ workEnd: e.target.value }));
+  $('#set-start').addEventListener('change', saveHours);
+  $('#set-end').addEventListener('change', saveHours);
   $('#set-days').addEventListener('change', () => {
     const days = [...document.querySelectorAll('#set-days input:checked')].map((i) => Number(i.value));
     saveSettings({ workDays: days });

@@ -1,4 +1,5 @@
-// Cálculos de jornada. Todas las horas se interpretan en Europe/Madrid (CET/CEST),
+// Cálculos de jornada. Jornada diaria de 8 h: lo que pase de 8 h es extra y lo que
+// falte queda pendiente de compensar. Todas las horas se interpretan en Europe/Madrid (CET/CEST),
 // independientemente de la zona horaria configurada en el dispositivo.
 
 export const TZ = 'Europe/Madrid';
@@ -9,6 +10,7 @@ export const DEFAULT_SETTINGS = {
   workEnd: '15:00',
   workDays: [1, 2, 3, 4, 5], // 0 = domingo ... 6 = sábado
   holidays: [], // ['YYYY-MM-DD', ...]
+  vacations: [], // [{ id, from: 'YYYY-MM-DD', to: 'YYYY-MM-DD' }]
 };
 
 export const WEEKDAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -103,11 +105,34 @@ export function fromLocalInput(value) {
   return zonedToUtc(y, m, d, h, mi);
 }
 
-export function isWorkday(y, m, d, settings) {
-  return settings.workDays.includes(weekdayOf(y, m, d)) && !settings.holidays.includes(keyOf(y, m, d));
+/** ¿La fecha cae dentro de algún periodo de vacaciones? */
+export function inVacation(key, settings) {
+  return (settings.vacations || []).some((v) => key >= v.from && key <= v.to);
 }
 
-/** Ventana de jornada [inicio, fin] en ms UTC para un día laborable. */
+/** Tipo de día: Laborable, Festivo, Vacaciones, Fin de semana o No laborable. */
+export function dayKind(y, m, d, settings) {
+  const key = keyOf(y, m, d);
+  const wd = weekdayOf(y, m, d);
+  if (settings.holidays.includes(key)) return 'Festivo';
+  if (!settings.workDays.includes(wd)) return wd === 0 || wd === 6 ? 'Fin de semana' : 'No laborable';
+  if (inVacation(key, settings)) return 'Vacaciones';
+  return 'Laborable';
+}
+
+/** Día en el que se espera fichar la jornada completa. */
+export function isWorkday(y, m, d, settings) {
+  return dayKind(y, m, d, settings) === 'Laborable';
+}
+
+/** Duración de la jornada diaria (por defecto 07:00–15:00 = 8 h). */
+export function dailyTarget(settings) {
+  const [sh, sm] = hm(settings.workStart);
+  const [eh, em] = hm(settings.workEnd);
+  return Math.max(0, (eh * 60 + em - sh * 60 - sm) * 60000);
+}
+
+/** Ventana del horario habitual [inicio, fin] en ms UTC (solo orientativa). */
 export function workWindow(y, m, d, settings) {
   const [sh, sm] = hm(settings.workStart);
   const [eh, em] = hm(settings.workEnd);
@@ -128,66 +153,68 @@ export function splitByDay(start, end) {
   return out;
 }
 
-/** Partes de un segmento que quedan fuera del horario (horas extra). */
-export function outsidePieces(seg, settings) {
-  const { y, m, d } = parseKey(seg.key);
-  if (!isWorkday(y, m, d, settings)) return [{ start: seg.start, end: seg.end }];
-  const [ws, we] = workWindow(y, m, d, settings);
-  const pieces = [];
-  if (seg.start < ws) pieces.push({ start: seg.start, end: Math.min(seg.end, ws) });
-  if (seg.end > we) pieces.push({ start: Math.max(seg.start, we), end: seg.end });
-  return pieces;
-}
-
 function emptyDay(key, settings) {
   const { y, m, d } = parseKey(key);
-  const workday = isWorkday(y, m, d, settings);
-  let kind = 'Laborable';
-  if (settings.holidays.includes(key)) kind = 'Festivo';
-  else if (!settings.workDays.includes(weekdayOf(y, m, d))) kind = 'Fin de semana';
-  let expected = 0;
-  if (workday) {
-    const [ws, we] = workWindow(y, m, d, settings);
-    expected = we - ws;
-  }
-  return { key, y, m, d, weekday: weekdayOf(y, m, d), kind, workday, expected,
-    segments: [], extra: [], worked: 0, outside: 0, inSchedule: 0 };
+  const kind = dayKind(y, m, d, settings);
+  const workday = kind === 'Laborable';
+  return { key, y, m, d, weekday: weekdayOf(y, m, d), kind, workday,
+    expected: workday ? dailyTarget(settings) : 0,
+    segments: [], extra: [], worked: 0, overtime: 0, pending: 0, balance: 0 };
 }
 
 /**
- * Agrupa los fichajes por día y calcula, para cada día:
- *  worked     – tiempo total fichado
- *  outside    – tiempo fuera del horario laboral (horas extra)
- *  inSchedule – tiempo dentro del horario
- *  expected   – duración de la jornada teórica
- * Los fichajes abiertos (sin salida) se cuentan hasta `now`.
+ * Cálculo de un día:
+ *  worked   – tiempo total fichado (suma de todos los tramos, da igual el horario)
+ *  expected – jornada que se espera ese día (8 h en laborables, 0 en festivos/vacaciones/fines de semana)
+ *  overtime – horas extra: lo trabajado por encima de la jornada
+ *  pending  – horas pendientes de compensar: lo que falta para llegar a la jornada
+ *  extra    – tramos concretos de horas extra: lo trabajado a partir de completar
+ *             la jornada (o todo, si el día no es laborable)
  */
+function finishDay(day) {
+  day.segments.sort((a, b) => a.start - b.start);
+  let acc = 0;
+  for (const seg of day.segments) {
+    const len = seg.end - seg.start;
+    const remaining = Math.max(0, day.expected - acc);
+    if (len > remaining) {
+      day.extra.push({ start: seg.start + remaining, end: seg.end, session: seg.session });
+    }
+    acc += len;
+  }
+  day.worked = acc;
+  day.overtime = Math.max(0, acc - day.expected);
+  day.pending = Math.max(0, day.expected - acc);
+  day.balance = acc - day.expected;
+  return day;
+}
+
+/** Redondea un instante al minuto (los fichajes se contabilizan por minutos completos). */
+export const floorMinute = (ms) => Math.floor(ms / 60000) * 60000;
+
+/** Agrupa los fichajes por día. Los fichajes abiertos se cuentan hasta `now`. */
 export function computeDays(sessions, settings, now = Date.now()) {
   const days = new Map();
-  const get = (key) => {
-    if (!days.has(key)) days.set(key, emptyDay(key, settings));
-    return days.get(key);
-  };
   for (const s of sessions) {
-    const end = s.end ?? now;
-    if (end <= s.start) continue;
-    for (const seg of splitByDay(s.start, end)) {
-      const day = get(seg.key);
-      const len = seg.end - seg.start;
-      const extra = outsidePieces(seg, settings);
-      const out = extra.reduce((a, p) => a + (p.end - p.start), 0);
-      day.segments.push({ ...seg, session: s, open: s.end == null });
-      day.extra.push(...extra.map((p) => ({ ...p, session: s })));
-      day.worked += len;
-      day.outside += out;
-      day.inSchedule += len - out;
+    const start = floorMinute(s.start);
+    const end = floorMinute(s.end ?? now);
+    if (end <= start) continue;
+    for (const seg of splitByDay(start, end)) {
+      if (!days.has(seg.key)) days.set(seg.key, emptyDay(seg.key, settings));
+      days.get(seg.key).segments.push({ ...seg, session: s, open: s.end == null });
     }
   }
-  for (const day of days.values()) {
-    day.segments.sort((a, b) => a.start - b.start);
-    day.extra.sort((a, b) => a.start - b.start);
-  }
+  for (const day of days.values()) finishDay(day);
   return days;
+}
+
+/** Cálculo de un único día (el de `now` por defecto). */
+export function dayStats(key, sessions, settings, now = Date.now()) {
+  const { y, m, d } = parseKey(key);
+  const from = zonedToUtc(y, m, d);
+  const to = zonedToUtc(y, m, d + 1);
+  const relevant = sessions.filter((s) => s.start < to && (s.end ?? now) > from);
+  return computeDays(relevant, settings, now).get(key) || emptyDay(key, settings);
 }
 
 /** Todos los días de un mes (hasta hoy si es el mes en curso) con sus cálculos. */
@@ -197,7 +224,7 @@ export function monthDays(y, m, sessions, settings, now = Date.now()) {
   const out = [];
   for (let d = 1; d <= daysInMonth(y, m); d++) {
     const key = keyOf(y, m, d);
-    const day = days.get(key) || emptyDay(key, settings);
+    const day = days.get(key) || finishDay(emptyDay(key, settings));
     if (key > todayKey && day.segments.length === 0) continue;
     out.push(day);
   }
@@ -205,15 +232,31 @@ export function monthDays(y, m, sessions, settings, now = Date.now()) {
 }
 
 export function sumDays(days) {
-  const t = { worked: 0, outside: 0, inSchedule: 0, expected: 0 };
+  const t = { worked: 0, expected: 0, overtime: 0, pending: 0, vacationDays: 0, workedDays: 0 };
   for (const d of days) {
     t.worked += d.worked;
-    t.outside += d.outside;
-    t.inSchedule += d.inSchedule;
     t.expected += d.expected;
+    t.overtime += d.overtime;
+    t.pending += d.pending;
+    if (d.kind === 'Vacaciones') t.vacationDays++;
+    if (d.segments.length) t.workedDays++;
   }
   t.balance = t.worked - t.expected;
   return t;
+}
+
+/** Días laborables (según el horario y festivos) dentro de un rango de fechas. */
+export function workingDaysBetween(from, to, settings) {
+  const a = parseKey(from);
+  let count = 0;
+  const base = { ...settings, vacations: [] };
+  for (let i = 0; ; i++) {
+    const dt = new Date(Date.UTC(a.y, a.m - 1, a.d + i));
+    const key = keyOf(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate());
+    if (key > to) break;
+    if (isWorkday(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate(), base)) count++;
+  }
+  return count;
 }
 
 /** Domingo de Pascua (algoritmo gregoriano anónimo). */

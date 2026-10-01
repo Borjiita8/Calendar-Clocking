@@ -28,6 +28,7 @@
       <div id="status-card" class="card status">
         <div id="status-text" class="status-text">Cargando…</div>
         <div id="status-timer" class="status-timer"></div>
+        <div id="status-warn" class="warn" hidden></div>
       </div>
 
       <div class="punch">
@@ -39,12 +40,16 @@
         </button>
       </div>
       <p id="schedule-hint" class="hint"></p>
+      <div class="quick">
+        <button id="late-btn" class="btn">🕘 Fichar con otra hora</button>
+        <button id="vac-btn" class="btn">🏖 Vacaciones</button>
+      </div>
 
       <div class="card">
         <h2>Hoy</h2>
         <div class="stats">
           <div><span id="today-worked">0:00</span><small>Trabajado</small></div>
-          <div><span id="today-in">0:00</span><small>En horario</small></div>
+          <div><span id="today-pending">0:00</span><small>Falta</small></div>
           <div><span id="today-extra" class="extra">0:00</span><small>Horas extra</small></div>
         </div>
         <ul id="today-list" class="sessions"></ul>
@@ -60,8 +65,8 @@
       <div class="card stats-card">
         <div class="stats">
           <div><span id="hist-worked">0:00</span><small>Trabajado</small></div>
-          <div><span id="hist-expected">0:00</span><small>Teórico</small></div>
           <div><span id="hist-extra" class="extra">0:00</span><small>Horas extra</small></div>
+          <div><span id="hist-pending" class="pending">0:00</span><small>Pendiente</small></div>
         </div>
       </div>
       <div id="hist-list"></div>
@@ -77,10 +82,11 @@
         <dl class="summary">
           <dt>Horas trabajadas</dt><dd id="rep-worked">0:00</dd>
           <dt>Jornada teórica</dt><dd id="rep-expected">0:00</dd>
-          <dt>Dentro de horario</dt><dd id="rep-in">0:00</dd>
           <dt>Horas extra</dt><dd id="rep-extra" class="extra">0:00</dd>
-          <dt>Balance</dt><dd id="rep-balance">0:00</dd>
+          <dt>Pendiente de compensar</dt><dd id="rep-pending" class="pending">0:00</dd>
+          <dt>Balance neto</dt><dd id="rep-balance">0:00</dd>
           <dt>Días con fichajes</dt><dd id="rep-days">0</dd>
+          <dt>Días de vacaciones</dt><dd id="rep-vac">0</dd>
         </dl>
       </div>
       <div class="actions">
@@ -95,7 +101,8 @@
     <!-- AJUSTES -->
     <section id="view-ajustes" class="view">
       <div class="card">
-        <h2>Horario laboral (hora de Madrid)</h2>
+        <h2>Horario habitual (hora de Madrid)</h2>
+        <p id="target-hint" class="hint"></p>
         <div class="row">
           <label>Entrada <input type="time" id="set-start"></label>
           <label>Salida <input type="time" id="set-end"></label>
@@ -104,8 +111,9 @@
       </div>
 
       <div class="card">
-        <h2>Festivos y vacaciones</h2>
-        <p class="hint">En estos días todo lo trabajado cuenta como horas extra.</p>
+        <h2>Festivos</h2>
+        <p class="hint">En festivos no se espera jornada y todo lo trabajado cuenta como horas extra.
+          Las vacaciones se añaden desde la pantalla Fichar (botón 🏖 Vacaciones).</p>
         <div class="row">
           <input type="date" id="hol-date" aria-label="Fecha">
           <button id="hol-add" class="btn">Añadir</button>
@@ -139,6 +147,7 @@
       <h2 id="edit-title">Editar fichaje</h2>
       <label>Entrada <input type="datetime-local" id="edit-start" required></label>
       <label>Salida <input type="datetime-local" id="edit-end"></label>
+      <label class="check"><input type="checkbox" id="edit-open"> Sigo trabajando (sin hora de salida)</label>
       <label>Nota <input type="text" id="edit-note" maxlength="200" placeholder="Opcional"></label>
       <p id="edit-error" class="error"></p>
       <div class="dialog-actions">
@@ -147,6 +156,39 @@
         <button type="button" id="edit-cancel" class="btn">Cancelar</button>
         <button type="submit" id="edit-save" class="btn primary">Guardar</button>
       </div>
+    </form>
+  </dialog>
+
+  <dialog id="late-dialog">
+    <form id="late-form">
+      <h2 id="late-title">Fichar con otra hora</h2>
+      <p id="late-text" class="hint"></p>
+      <label><span id="late-label">Hora</span> <input type="time" id="late-time" required></label>
+      <p id="late-error" class="error"></p>
+      <div class="dialog-actions">
+        <span class="spacer"></span>
+        <button type="button" id="late-cancel" class="btn">Cancelar</button>
+        <button type="submit" id="late-save" class="btn primary">Fichar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="vac-dialog">
+    <form id="vac-form">
+      <h2>Vacaciones</h2>
+      <p class="hint">En los días laborables de las vacaciones no se espera jornada. Si fichas algún día
+        de vacaciones, cuenta entero como horas extra.</p>
+      <div class="row">
+        <label>Desde <input type="date" id="vac-from" required></label>
+        <label>Hasta <input type="date" id="vac-to" required></label>
+      </div>
+      <p id="vac-error" class="error"></p>
+      <div class="dialog-actions">
+        <span class="spacer"></span>
+        <button type="button" id="vac-close" class="btn">Cerrar</button>
+        <button type="submit" class="btn primary">Añadir</button>
+      </div>
+      <ul id="vac-list" class="vac-list"></ul>
     </form>
   </dialog>
 

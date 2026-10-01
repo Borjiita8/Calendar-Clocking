@@ -256,3 +256,36 @@ dialog label { margin-bottom: 12px; }
   text-align: center;
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+.pending { color: var(--out); }
+.quick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.quick .btn { font-size: .9rem; padding: 10px 8px; white-space: normal; }
+.warn {
+  background: color-mix(in srgb, var(--out) 12%, transparent);
+  color: var(--out);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: .875rem;
+  margin-top: 8px;
+}
+.status.vacation { border-left-color: var(--primary); }
+label.check { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: .95rem; }
+label.check input { width: 20px; height: 20px; margin: 0; }
+input:disabled { opacity: .45; }
+.vac-list { list-style: none; padding: 0; margin: 16px 0 0; max-height: 40vh; overflow: auto; }
+.vac-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 4px;
+  border-top: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+.vac-list li small { color: var(--muted); display: block; }
+.vac-list button { border: 0; background: none; color: var(--muted); font-size: 1rem; padding: 6px 10px; cursor: pointer; }
+.vac-list li.past { opacity: .6; }
+.row label { min-width: 0; }
+.row input, dialog input { min-width: 0; max-width: 100%; }
+dialog .row { gap: 8px; }
+dialog input[type="date"] { padding: 10px 8px; }
