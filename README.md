@@ -80,6 +80,7 @@ de aplicaciones, y se abre a pantalla completa con su propio icono, como cualqui
 | Descarga del Excel | ✅ Carpeta *Descargas* | ✅ App *Archivos* | ✅ Carpeta de descargas |
 | Compartir el Excel (correo, Drive, Teams…) | ✅ | ✅ | Según navegador |
 | Almacenamiento persistente | ✅ Garantizado al instalar la app | ⚠️ Gestionado por iOS (ver nota) | ✅ |
+| Sincronización con Google Drive | ✅ | ✅ | ✅ |
 | Vibración al fichar | ✅ | — (no disponible en iOS) | — |
 
 **Notas sobre iPhone / iPad**
@@ -123,6 +124,8 @@ vuelve a abrirla.
 1. **Ajustes → Jornada laboral**: revisa el horario, el break y los días laborables.
 2. **Ajustes → Festivos**: añade los festivos nacionales y los de tu comunidad autónoma y localidad.
 3. **🏖 Vacaciones** (pantalla principal): registra tus periodos de vacaciones.
+4. **Ajustes → Cuenta de Google** (opcional): inicia sesión para tener copia automática en Google
+   Drive y sincronizar tus datos entre dispositivos.
 
 ---
 
@@ -230,37 +233,138 @@ Google Calendar, Outlook o Apple Calendar, los tramos aparecen como eventos en s
 
 ## Sincronización con Google Drive
 
-Iniciar sesión con Google es **opcional**. Sin hacerlo, la aplicación funciona igual, con los datos
-guardados solo en el dispositivo.
+Fichajes permite, de forma **opcional**, iniciar sesión con una cuenta de Google (Gmail) para
+guardar una copia de todos los datos en el **Google Drive del propio usuario** y mantenerlos
+sincronizados entre todos sus dispositivos: móvil, tablet y ordenador.
 
-Al iniciar sesión desde **Ajustes → Cuenta de Google**:
+Sin iniciar sesión, la aplicación funciona exactamente igual, con los datos guardados solo en el
+dispositivo.
 
-- Los fichajes, el horario, los festivos y las vacaciones se guardan en el **Google Drive del propio
-  usuario**, en la carpeta privada de la aplicación. Esta carpeta no aparece entre sus archivos y
-  ninguna otra persona ni aplicación puede leerla.
-- Basta con iniciar sesión con la misma cuenta en otro dispositivo para tener allí todos los datos.
-- La sincronización es **automática**: al fichar, al editar y al abrir la aplicación. El indicador
-  ☁ de la parte superior muestra el estado y, al tocarlo, sincroniza en ese momento.
-- Sin conexión todo sigue funcionando. Los cambios se suben al recuperar la conexión.
-- Los datos de distintos dispositivos se **combinan**, no se sobrescriben: un fichaje hecho en
-  cualquier dispositivo se conserva y un fichaje borrado se borra en todos.
-- Por seguridad, Google renueva el acceso cada hora. Si ha caducado, se renueva automáticamente
-  al fichar (puede aparecer un instante la ventana de Google) o tocando el indicador ☁.
+### Ventajas
 
-**Permisos.** La aplicación solo pide la dirección de correo, para mostrar la cuenta conectada, y
-acceso a **su propia carpeta de datos** en Drive (`drive.appdata`). No puede ver, modificar ni
-borrar ningún otro archivo del usuario, ni accede al correo de Gmail.
+- **Copia de seguridad automática.** Los fichajes no se pierden al cambiar de móvil, desinstalar la
+  app o borrar los datos del navegador.
+- **Los mismos datos en todos los dispositivos.** Lo que se ficha en el móvil aparece en el
+  ordenador, y al revés.
+- **Sin servidores intermedios.** Los datos viajan directamente entre el dispositivo y la cuenta de
+  Google del usuario.
 
-**Espacio ocupado.** Los datos se guardan comprimidos en un único archivo, que solo se actualiza
-cuando hay cambios. Ocupa unos **30 KB por año** de fichajes, y menos de **0,3 MB tras 10 años**
-de uso intensivo. Es una fracción insignificante de los 15 GB gratuitos de una cuenta de Google.
+### Activarla
 
-**Cerrar sesión y borrar datos.**
-- *Cerrar sesión* retira el permiso concedido a la aplicación. Los fichajes del dispositivo se
-  conservan.
-- *Borrar mis datos de Google Drive* elimina la copia de Drive y cierra la sesión. Los fichajes del
-  dispositivo también se conservan.
-- El permiso puede retirarse igualmente desde <https://myaccount.google.com/permissions>.
+1. Abre **Ajustes → Cuenta de Google** y pulsa **Iniciar sesión con Google**.
+2. Elige la cuenta de Google que quieras usar.
+3. Revisa los permisos que solicita la aplicación y acepta. Si aparece una casilla para el acceso a
+   Google Drive, debe estar marcada.
+4. Se mostrará **«Conectado como…»** con la cuenta elegida, y en la parte superior aparecerá el
+   indicador **☁ Sincronizado**. Los fichajes que ya hubiera en el dispositivo se suben en ese
+   momento.
+
+Para usar la aplicación en otro dispositivo, instálala allí e inicia sesión con **la misma cuenta**:
+todos los datos se descargarán automáticamente.
+
+### Qué se sincroniza
+
+| Se sincroniza | No se sincroniza |
+|---|---|
+| Fichajes (entradas, salidas y notas) | Informes Excel y archivos .ics generados |
+| Horario laboral, break y horario personalizado | Copias de seguridad .json exportadas |
+| Festivos y vacaciones | Preferencias del propio dispositivo (por ejemplo, la instalación de la app) |
+
+### Cómo funciona
+
+- **Automática.** La sincronización se realiza al fichar o editar, al abrir la aplicación y al
+  recuperar la conexión. No es necesario hacer nada más.
+- **Primero en el dispositivo.** Cada fichaje se guarda al instante en el dispositivo y después se
+  envía a Drive, de modo que la aplicación responde igual de rápido con o sin conexión.
+- **Sin conexión.** Se puede fichar con normalidad; los cambios pendientes se suben en cuanto vuelve
+  la conexión.
+- **Los datos se combinan, no se sobrescriben.** Al sincronizar, los datos del dispositivo y los de
+  Drive se fusionan fichaje a fichaje:
+  - un fichaje creado en cualquier dispositivo se conserva en todos;
+  - si un mismo fichaje se ha modificado en dos dispositivos, prevalece la modificación más
+    reciente;
+  - un fichaje eliminado en un dispositivo se elimina también en los demás y no vuelve a aparecer;
+  - en los ajustes (horario, festivos y vacaciones) prevalece la última versión guardada.
+- **Renovación de la sesión.** Por seguridad, Google concede el acceso por periodos de una hora.
+  Cuando caduca, se renueva automáticamente en la siguiente acción que modifique datos, como fichar
+  (puede verse un instante la ventana de Google), o tocando el indicador ☁.
+
+### Indicador de estado
+
+El indicador de la parte superior de la pantalla muestra el estado de la sincronización. Al tocarlo
+se sincroniza en ese momento.
+
+| Indicador | Significado |
+|---|---|
+| ☁ Sincronizado | Los datos del dispositivo y los de Drive están al día. |
+| ☁ Sincronizando… | Se está enviando o recibiendo información. |
+| ☁ Toca para sincronizar | El acceso de Google ha caducado. Se renovará al fichar o al tocar el indicador. |
+| ☁ Sin conexión | No hay internet. Los cambios se subirán al recuperar la conexión. |
+| ⚠ Error al sincronizar | Ha ocurrido un error. El detalle aparece en *Ajustes → Cuenta de Google*. |
+
+En *Ajustes → Cuenta de Google* se muestran también la cuenta conectada y la fecha y hora de la
+última sincronización.
+
+### Permisos y privacidad
+
+La aplicación solicita únicamente los permisos imprescindibles:
+
+| Permiso | Para qué se usa |
+|---|---|
+| Dirección de correo electrónico | Mostrar con qué cuenta se ha iniciado sesión. |
+| Datos propios de la aplicación en Google Drive (`drive.appdata`) | Guardar y leer la copia de los fichajes. |
+
+- Los datos se guardan en la **carpeta privada de la aplicación** dentro del Drive del usuario. No
+  aparece entre sus archivos y ninguna otra aplicación ni persona puede leerla.
+- La aplicación **no puede ver, modificar ni borrar ningún otro archivo** de Google Drive, y **no
+  tiene acceso al correo** de Gmail ni a otros servicios de Google.
+- Los responsables de la aplicación **no tienen acceso a los datos** de ningún usuario: cada persona
+  guarda los suyos en su propia cuenta.
+- La copia es visible en Google Drive, en **Configuración → Gestionar aplicaciones**, como
+  *Fichajes – datos de aplicación ocultos*, junto con el espacio que ocupa.
+
+### Espacio ocupado
+
+Todos los datos se guardan comprimidos en un único archivo, que solo se actualiza cuando hay
+cambios.
+
+| Uso | Espacio aproximado en Drive |
+|---|---|
+| 1 año de fichajes | 30 KB |
+| 10 años de fichajes | 0,3 MB |
+
+Es una fracción insignificante de los 15 GB gratuitos de una cuenta de Google.
+
+### Cerrar sesión y eliminar los datos de Drive
+
+En **Ajustes → Cuenta de Google**:
+
+- **Cerrar sesión** desconecta la cuenta y retira el permiso concedido a la aplicación. Los
+  fichajes del dispositivo se conservan, y la copia de Drive permanece por si se vuelve a iniciar
+  sesión más adelante.
+- **Borrar mis datos de Google Drive** elimina la copia guardada en Drive y cierra la sesión. Los
+  fichajes del dispositivo se conservan.
+
+El permiso también puede retirarse en cualquier momento desde
+[myaccount.google.com/permissions](https://myaccount.google.com/permissions).
+
+### Preguntas frecuentes
+
+**¿Qué ocurre si inicio sesión en un dispositivo que ya tenía fichajes?**
+Los fichajes del dispositivo y los de Drive se combinan. No se pierde ninguno de los dos.
+
+**¿Puedo usar la aplicación en el móvil y en el ordenador a la vez?**
+Sí. Se recomienda fichar la entrada y la salida de un mismo tramo desde el mismo dispositivo, o
+esperar a que el indicador muestre *Sincronizado* antes de continuar en el otro, para no abrir dos
+fichajes simultáneos.
+
+**¿Puedo cambiar de cuenta de Google?**
+Sí: cierra sesión e inicia sesión con la otra cuenta. Los fichajes del dispositivo se combinarán con
+los de la nueva cuenta.
+
+**¿Es obligatorio usar Gmail?**
+No. La sincronización es opcional y sirve cualquier cuenta de Google. Sin ella, se recomienda hacer
+copias de seguridad periódicas (ver [Copias de seguridad](#copias-de-seguridad)).
 
 ---
 
