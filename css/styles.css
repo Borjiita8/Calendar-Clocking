@@ -307,3 +307,10 @@ dialog input[type="date"] { padding: 10px 8px; }
 .cday-head .check { font-weight: 600; }
 .cday-hours { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--primary); }
 .cday .row.three { margin-top: 8px; }
+
+.top-actions { display: flex; gap: 8px; align-items: center; }
+.chip.ghost { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+.chip.ghost.warn-chip { color: var(--out); border-color: var(--out); }
+.btn.google { gap: 10px; width: 100%; }
+.account { margin: 0 0 4px; overflow-wrap: anywhere; }
+#cloud-error:empty { display: none; }
