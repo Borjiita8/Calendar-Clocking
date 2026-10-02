@@ -1,6 +1,6 @@
 // Service worker: guarda la app en caché para que funcione sin conexión.
 // Cambia CACHE al publicar una versión nueva para forzar la actualización.
-const CACHE = 'fichajes-v3';
+const CACHE = 'fichajes-v4';
 const ASSETS = [
   './',
   'index.html',
@@ -10,6 +10,9 @@ const ASSETS = [
   'js/db.js',
   'js/report.js',
   'js/xlsx.js',
+  'js/sync.js',
+  'js/cloud.js',
+  'js/config.js',
   'manifest.webmanifest',
   'icons/icon.svg',
   'icons/icon-192.png',

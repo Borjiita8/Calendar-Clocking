@@ -5,8 +5,9 @@ móvil. Permite hacer *clock in* y *clock out* con un solo toque, calcula autom�
 extra y las horas pendientes de compensar según el horario de cada persona, y genera informes
 mensuales en Excel listos para entregar o para trasladar al calendario de la empresa.
 
-Funciona sin conexión, se instala como una app en Android, iPhone y ordenador, y **todos los datos
-se guardan únicamente en el dispositivo**: no hay cuentas, servidores ni seguimiento.
+Funciona sin conexión y se instala como una app en Android, iPhone y ordenador. Los datos se
+guardan en el dispositivo y, de forma opcional, en el **Google Drive del propio usuario** para
+tenerlos sincronizados en todos sus dispositivos. No hay servidores propios ni seguimiento.
 
 **Acceso:** <https://borjiita8.github.io/Calendar-Clocking/>
 
@@ -20,6 +21,7 @@ se guardan únicamente en el dispositivo**: no hay cuentas, servidores ni seguim
 - [Guía de uso](#guía-de-uso)
 - [Cálculo de la jornada y de las horas extra](#cálculo-de-la-jornada-y-de-las-horas-extra)
 - [Informes](#informes)
+- [Sincronización con Google Drive](#sincronización-con-google-drive)
 - [Privacidad y almacenamiento de datos](#privacidad-y-almacenamiento-de-datos)
 - [Información importante](#información-importante)
 - [Desarrollo](#desarrollo)
@@ -55,6 +57,8 @@ se guardan únicamente en el dispositivo**: no hay cuentas, servidores ni seguim
   y Apple Calendar.
 
 **Datos**
+- **Inicio de sesión con Google (opcional)**: copia automática en el Google Drive del usuario y
+  sincronización entre dispositivos (móvil, tablet, ordenador).
 - Funcionamiento completo **sin conexión**.
 - Historial ilimitado: se conservan todos los años registrados.
 - **Copia de seguridad** exportable e importable (.json).
@@ -155,6 +159,7 @@ La aplicación tiene cuatro pantallas, accesibles desde la barra inferior.
   salida y break, y se puede marcar como laborable o libre. Al desactivarlo se vuelve al horario
   general sin perder la configuración personalizada.
 - **Festivos**: alta manual o carga de los festivos nacionales del año.
+- **Cuenta de Google**: iniciar o cerrar sesión, sincronizar y borrar la copia de Google Drive.
 - **Copia de seguridad**: exportar e importar todos los datos.
 
 ---
@@ -223,20 +228,62 @@ Google Calendar, Outlook o Apple Calendar, los tramos aparecen como eventos en s
 
 ---
 
+## Sincronización con Google Drive
+
+Iniciar sesión con Google es **opcional**. Sin hacerlo, la aplicación funciona igual, con los datos
+guardados solo en el dispositivo.
+
+Al iniciar sesión desde **Ajustes → Cuenta de Google**:
+
+- Los fichajes, el horario, los festivos y las vacaciones se guardan en el **Google Drive del propio
+  usuario**, en la carpeta privada de la aplicación. Esta carpeta no aparece entre sus archivos y
+  ninguna otra persona ni aplicación puede leerla.
+- Basta con iniciar sesión con la misma cuenta en otro dispositivo para tener allí todos los datos.
+- La sincronización es **automática**: al fichar, al editar y al abrir la aplicación. El indicador
+  ☁ de la parte superior muestra el estado y, al tocarlo, sincroniza en ese momento.
+- Sin conexión todo sigue funcionando. Los cambios se suben al recuperar la conexión.
+- Los datos de distintos dispositivos se **combinan**, no se sobrescriben: un fichaje hecho en
+  cualquier dispositivo se conserva y un fichaje borrado se borra en todos.
+- Por seguridad, Google renueva el acceso cada hora. Si ha caducado, se renueva automáticamente
+  al fichar (puede aparecer un instante la ventana de Google) o tocando el indicador ☁.
+
+**Permisos.** La aplicación solo pide la dirección de correo, para mostrar la cuenta conectada, y
+acceso a **su propia carpeta de datos** en Drive (`drive.appdata`). No puede ver, modificar ni
+borrar ningún otro archivo del usuario, ni accede al correo de Gmail.
+
+**Espacio ocupado.** Los datos se guardan comprimidos en un único archivo, que solo se actualiza
+cuando hay cambios. Ocupa unos **30 KB por año** de fichajes, y menos de **0,3 MB tras 10 años**
+de uso intensivo. Es una fracción insignificante de los 15 GB gratuitos de una cuenta de Google.
+
+**Cerrar sesión y borrar datos.**
+- *Cerrar sesión* retira el permiso concedido a la aplicación. Los fichajes del dispositivo se
+  conservan.
+- *Borrar mis datos de Google Drive* elimina la copia de Drive y cierra la sesión. Los fichajes del
+  dispositivo también se conservan.
+- El permiso puede retirarse igualmente desde <https://myaccount.google.com/permissions>.
+
+---
+
 ## Privacidad y almacenamiento de datos
 
-- Los fichajes y la configuración se guardan **solo en el dispositivo**, en el almacenamiento
-  local del navegador (IndexedDB).
-- La aplicación **no envía datos a ningún servidor**, no requiere registro y no incluye analítica,
-  publicidad ni rastreadores.
+- Los fichajes y la configuración se guardan en el dispositivo, en el almacenamiento local del
+  navegador (IndexedDB).
+- Si el usuario inicia sesión con Google, se guarda además una copia en **su propio Google Drive**.
+  Los datos viajan directamente entre el dispositivo y Google.
+- La aplicación **no tiene servidores ni bases de datos propias**. Nadie más que el usuario, ni
+  siquiera los responsables de la aplicación, puede acceder a sus fichajes.
+- No incluye analítica, publicidad ni rastreadores.
 - Los informes y las copias de seguridad se generan localmente y solo salen del dispositivo si el
   usuario los comparte.
-- Cada dispositivo y cada navegador tienen sus propios datos; no se sincronizan entre sí. Para
-  pasar los datos a otro dispositivo, exporta una copia de seguridad e impórtala en el nuevo.
+- Sin sesión de Google, cada dispositivo tiene sus propios datos. Para pasarlos a otro dispositivo,
+  inicia sesión con Google o usa la copia de seguridad.
+
+Más información en la [política de privacidad](privacidad.html).
 
 ### Copias de seguridad
-Como los datos residen solo en el dispositivo, **desinstalar la app, borrar los datos del navegador
-o cambiar de móvil elimina los fichajes**. Se recomienda:
+Con la sesión de Google iniciada, los datos ya tienen copia en Drive. Sin ella, residen solo en el
+dispositivo, y **desinstalar la app, borrar los datos del navegador o cambiar de móvil elimina los
+fichajes**. En ese caso se recomienda:
 
 1. Exportar una copia desde **Ajustes → Copia de seguridad → Exportar copia (.json)**, por ejemplo
    una vez al mes después de generar el informe.
@@ -257,8 +304,8 @@ o cambiar de móvil elimina los fichajes**. Se recomienda:
 - **Horas extra y compensación.** La aplicación aplica un criterio aritmético (tiempo trabajado
   frente a jornada configurada). La consideración final de las horas extra y su compensación
   dependen del convenio colectivo, del contrato y de los acuerdos con la empresa.
-- **Sin recordatorios automáticos.** Al no depender de ningún servidor, la aplicación no puede
-  enviar notificaciones de aviso para fichar. Los fichajes olvidados se pueden registrar después
+- **Sin recordatorios automáticos.** Al no depender de ningún servidor propio, la aplicación no
+  puede enviar notificaciones de aviso para fichar. Los fichajes olvidados se pueden registrar después
   con la hora real.
 - **Fichajes manuales.** Las entradas y salidas registradas a posteriori quedan identificadas como
   «Manual» en el historial y en el Excel, para mayor transparencia.
@@ -280,6 +327,10 @@ js/calc.js            Cálculo de jornada, horas extra, festivos y zona horaria
 js/report.js          Generación del Excel y del calendario .ics
 js/xlsx.js            Escritor de archivos .xlsx
 js/db.js              Almacenamiento local (IndexedDB)
+js/sync.js            Fusión y compresión de datos para la sincronización
+js/cloud.js           Inicio de sesión con Google y sincronización con Google Drive
+js/config.js          ID de cliente OAuth de Google
+privacidad.html       Política de privacidad
 sw.js                 Service worker (funcionamiento sin conexión)
 manifest.webmanifest  Manifiesto de la PWA
 icons/                Iconos de la aplicación
@@ -290,6 +341,21 @@ tests/                Tests de cálculo y de generación de informes
 npm test        # ejecuta los tests (Node.js 20 o superior)
 npm start       # servidor local en http://localhost:8080
 ```
+
+**Inicio de sesión con Google.** Para activarlo en una instalación propia:
+
+1. En [Google Cloud Console](https://console.cloud.google.com/), crea un proyecto y habilita la
+   **Google Drive API**.
+2. En *Google Auth Platform*, configura la pantalla de consentimiento (tipo *Externo*), con la URL
+   de la app como página principal y `privacidad.html` como política de privacidad. Añade los
+   permisos `openid`, `.../auth/userinfo.email` y `.../auth/drive.appdata`.
+3. Crea un **ID de cliente OAuth** de tipo *Aplicación web* y añade el origen de la app (por
+   ejemplo, `https://usuario.github.io`) en *Orígenes de JavaScript autorizados*.
+4. Copia el ID de cliente en `js/config.js`.
+
+Mientras la app está en modo *Prueba*, solo pueden iniciar sesión las cuentas añadidas como
+usuarios de prueba (hasta 100). Para abrirla a cualquier cuenta hay que *publicarla* en la pantalla
+de consentimiento; Google puede solicitar una verificación.
 
 **Publicación.** Cada cambio en la rama `main` ejecuta los tests y, si pasan, publica la aplicación
 en GitHub Pages mediante el workflow `.github/workflows/pages.yml`.

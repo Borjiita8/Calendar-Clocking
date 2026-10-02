@@ -1,4 +1,5 @@
 import * as db from './db.js';
+import * as cloud from './cloud.js';
 import {
   DEFAULT_SETTINGS, WEEKDAYS, MONTHS, monthDays, sumDays, dayStats, dayKey, zonedParts,
   zonedToUtc, dailyTarget, floorMinute, scheduleFor, scheduleTarget, describeSchedule,
@@ -62,6 +63,7 @@ async function reload() {
 
 async function clockIn() {
   if (openSession()) return;
+  cloud.touch();
   const s = { id: newId(), start: floorMinute(Date.now()), end: null, note: '', source: 'button', createdAt: Date.now() };
   await db.putSession(s);
   navigator.vibrate?.(60);
@@ -72,6 +74,7 @@ async function clockIn() {
 async function clockOut() {
   const s = openSession();
   if (!s) return;
+  cloud.touch();
   s.end = floorMinute(Date.now());
   s.updatedAt = Date.now();
   if (s.end <= floorMinute(s.start)) {
@@ -169,6 +172,7 @@ function openLate() {
 
 async function saveLate(ev) {
   ev.preventDefault();
+  cloud.touch();
   const err = (msg) => { $('#late-error').textContent = msg; };
   const now = Date.now();
   const p = zonedParts(now);
@@ -341,8 +345,9 @@ function renderAjustes() {
 }
 
 async function saveSettings(patch) {
+  cloud.touch();
   state.settings = { ...state.settings, ...patch };
-  await db.setMeta('settings', state.settings);
+  await db.saveSettings(state.settings);
   render();
 }
 
@@ -411,6 +416,7 @@ function openEditor(session) {
 
 async function saveEdit(ev) {
   ev.preventDefault();
+  cloud.touch();
   const err = (msg) => { $('#edit-error').textContent = msg; };
   const now = Date.now();
   if (!$('#edit-start').value) return err('Indica la hora de entrada.');
@@ -439,6 +445,7 @@ async function saveEdit(ev) {
 
 async function deleteEdit() {
   if (!state.editing || !confirm('¿Eliminar este fichaje?')) return;
+  cloud.touch();
   await db.deleteSession(state.editing.id);
   $('#edit-dialog').close();
   toast('Fichaje eliminado');
@@ -463,11 +470,60 @@ async function importBackup(file) {
     const added = valid.filter((s) => !existing.has(s.id)).length;
     if (!confirm(`¿Importar ${valid.length} fichajes (${added} nuevos)? Los que ya existan se sobrescribirán.`)) return;
     await db.putSessions(valid);
-    if (data.settings) await db.setMeta('settings', { ...DEFAULT_SETTINGS, ...data.settings });
+    cloud.touch();
+    if (data.settings) await db.saveSettings({ ...DEFAULT_SETTINGS, ...data.settings });
     await init(false);
     toast(`Importados ${valid.length} fichajes`);
   } catch {
     toast('El fichero no es una copia válida');
+  }
+}
+
+// ---------- Cuenta de Google ----------
+
+function fmtStamp(ms) {
+  const p = zonedParts(ms);
+  return dayKey(ms) === todayKey() ? `hoy a las ${fmtTime(ms)}` : `el ${pad(p.d)}/${pad(p.m)} a las ${fmtTime(ms)}`;
+}
+
+function renderCloud() {
+  const c = cloud.getState();
+  const signedIn = !!c.email;
+  $('#cloud-card').hidden = !cloud.enabled;
+  $('#cloud-out').hidden = signedIn;
+  $('#cloud-in').hidden = !signedIn;
+  $('#cloud-email').textContent = c.email || '';
+  const last = c.lastSync ? `Última sincronización ${fmtStamp(c.lastSync)}.` : 'Aún no se ha sincronizado.';
+  const statusText = {
+    syncing: 'Sincronizando…',
+    ok: last,
+    pending: `${last} Pulsa «Sincronizar ahora» para renovar la sesión de Google.`,
+    offline: `${last} Sin conexión: se sincronizará al recuperarla.`,
+    error: last,
+  }[c.status] || last;
+  $('#cloud-status').textContent = statusText;
+  $('#cloud-error').textContent = c.status === 'error' || (!signedIn && c.message) ? c.message : '';
+
+  const chip = $('#sync-chip');
+  chip.hidden = !signedIn;
+  chip.classList.toggle('warn-chip', c.status === 'error' || c.status === 'pending');
+  chip.textContent = {
+    syncing: '☁ Sincronizando…',
+    ok: '☁ Sincronizado',
+    pending: '☁ Toca para sincronizar',
+    offline: '☁ Sin conexión',
+    error: '⚠ Error al sincronizar',
+  }[c.status] || '☁';
+}
+
+async function confirmDeleteRemote() {
+  if (!confirm('¿Borrar la copia de tus fichajes guardada en Google Drive y cerrar sesión? '
+    + 'Los fichajes de este dispositivo no se borran.')) return;
+  try {
+    await cloud.deleteRemote();
+    toast('Copia de Google Drive borrada');
+  } catch (e) {
+    toast(e.message);
   }
 }
 
@@ -571,6 +627,16 @@ function bind() {
     if (k) saveSettings({ holidays: state.settings.holidays.filter((h) => h !== k) });
   });
 
+  $('#cloud-signin').addEventListener('click', () => cloud.signIn());
+  $('#cloud-sync').addEventListener('click', () => cloud.syncNow());
+  $('#sync-chip').addEventListener('click', () => cloud.syncNow());
+  $('#cloud-signout').addEventListener('click', async () => {
+    if (!confirm('¿Cerrar sesión de Google? Los fichajes de este dispositivo se conservan.')) return;
+    await cloud.signOut();
+    toast('Sesión de Google cerrada');
+  });
+  $('#cloud-delete').addEventListener('click', confirmDeleteRemote);
+
   $('#backup-export').addEventListener('click', exportBackup);
   $('#backup-import').addEventListener('change', (e) => {
     const f = e.target.files[0];
@@ -604,6 +670,9 @@ async function init(first = true) {
     $('#rep-month').value = currentMonthValue();
     bind();
     db.requestPersistence();
+    cloud.subscribe(renderCloud);
+    renderCloud();
+    await cloud.init({ onData: () => init(false) });
   }
   await reload();
 }
