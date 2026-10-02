@@ -1,8 +1,8 @@
 // Cálculos de jornada. Jornada diaria de 8 h: lo que pase de 8 h es extra y lo que
-// falte queda pendiente de compensar. Todas las horas se interpretan en Europe/Madrid (CET/CEST),
+// falte queda pendiente de compensar. Todas las horas se interpretan en la zona horaria del dispositivo,
 // independientemente de la zona horaria configurada en el dispositivo.
 
-export const TZ = 'Europe/Madrid';
+export const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Madrid';
 export const DAY_MS = 86400000;
 
 export const DEFAULT_SETTINGS = {
@@ -27,7 +27,7 @@ const dtf = new Intl.DateTimeFormat('en-GB', {
   hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
 });
 
-/** Fecha/hora de pared en Madrid para un instante (ms UTC). */
+/** Fecha/hora local (zona horaria del dispositivo) para un instante (ms UTC). */
 export function zonedParts(ms) {
   const p = {};
   for (const { type, value } of dtf.formatToParts(new Date(ms))) p[type] = value;
@@ -40,7 +40,7 @@ function offsetAt(ms) {
   return Date.UTC(p.y, p.m - 1, p.d, p.h, p.mi, p.s) - t;
 }
 
-/** Instante (ms UTC) de una hora de pared en Madrid. Admite desbordes (d + 1, etc.). */
+/** Instante (ms UTC) de una hora local. Admite desbordes (d + 1, etc.). */
 export function zonedToUtc(y, m, d, h = 0, mi = 0) {
   const guess = Date.UTC(y, m - 1, d, h, mi);
   let t = guess - offsetAt(guess);
@@ -97,7 +97,7 @@ export function fmtDur(ms) {
   return `${sign}${Math.floor(totalMin / 60)}:${pad(totalMin % 60)}`;
 }
 
-/** 'YYYY-MM-DDTHH:MM' (hora Madrid) para inputs datetime-local. */
+/** 'YYYY-MM-DDTHH:MM' (hora local) para inputs datetime-local. */
 export function toLocalInput(ms) {
   const p = zonedParts(ms);
   return `${keyOf(p.y, p.m, p.d)}T${pad(p.h)}:${pad(p.mi)}`;
@@ -193,7 +193,7 @@ export function validateSchedule(sched) {
   return null;
 }
 
-/** Trocea un fichaje en segmentos por día natural (Madrid). */
+/** Trocea un fichaje en segmentos por día natural. */
 export function splitByDay(start, end) {
   const out = [];
   let cur = start;
@@ -337,7 +337,7 @@ export function spanishNationalHolidays(y) {
   ];
 }
 
-/** Número de serie de Excel para una hora de pared en Madrid. */
+/** Número de serie de Excel para una hora local. */
 export function excelSerial(ms) {
   const p = zonedParts(ms);
   return Date.UTC(p.y, p.m - 1, p.d, p.h, p.mi, p.s) / DAY_MS + 25569;

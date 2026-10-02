@@ -1,6 +1,6 @@
 // Generación de informes mensuales (.xlsx y .ics) a partir de los fichajes.
 import {
-  DAY_MS, MONTHS, WEEKDAYS, monthDays, sumDays, excelSerial, excelDateSerial,
+  DAY_MS, TZ, MONTHS, WEEKDAYS, monthDays, sumDays, excelSerial, excelDateSerial,
   fmtDur, fmtKey, scheduleFor, scheduleTarget, describeSchedule, weeklyTarget,
 } from './calc.js';
 import { buildXlsx, colName } from './xlsx.js';
@@ -102,7 +102,8 @@ export function monthWorkbook(y, m, sessions, settings, now = Date.now()) {
 
   const summary = [
     [{ v: `Registro de jornada – ${title}`, s: 'bold' }, null],
-    ['Horario', settings.customSchedule ? 'Personalizado por día (hora de Madrid)' : 'General (hora de Madrid)'],
+    ['Horario', settings.customSchedule ? 'Personalizado por día' : 'General'],
+    ['Zona horaria', TZ],
     ...[1, 2, 3, 4, 5, 6, 0].map((wd) => {
       const sched = scheduleFor(settings, wd);
       return [`  ${WEEKDAYS[wd]}`, sched ? `${describeSchedule(sched)} → ${fmtDur(scheduleTarget(sched))} h` : 'No laborable'];

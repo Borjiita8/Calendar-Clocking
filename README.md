@@ -204,8 +204,8 @@ jornada: todo el tiempo fichado se considera hora extra.
   día**, a partir del momento en que se completa la jornada.
 - Los fichajes se contabilizan por **minutos completos**.
 - Un fichaje que cruza la medianoche se reparte entre los dos días.
-- Todos los cálculos usan la hora peninsular española (**Europe/Madrid**, CET/CEST), incluido el
-  cambio de hora de verano e invierno, con independencia de la zona horaria del dispositivo.
+- Las horas se interpretan en la **zona horaria del dispositivo**, incluido el cambio de hora de
+  verano e invierno. El Excel indica la zona horaria usada.
 - La jornada teórica del mes cuenta los días laborables hasta la fecha actual. Registrar vacaciones
   y festivos evita que esos días aparezcan como horas pendientes.
 
