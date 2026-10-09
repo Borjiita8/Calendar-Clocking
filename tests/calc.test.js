@@ -194,3 +194,11 @@ test('validación del horario', () => {
   assert.match(validateSchedule({ start: '15:00', end: '07:00', breakMinutes: 0 }), /posterior/);
   assert.match(validateSchedule({ start: '08:00', end: '09:00', breakMinutes: 60 }), /break/);
 });
+
+test('un fichaje recién abierto aparece en el día aunque no haya pasado un minuto', () => {
+  const now = at(2026, 10, 1, 9, 0) + 20000;
+  const d = dayStats('2026-10-01', [sess('a', at(2026, 10, 1, 9, 0) + 5000, null)], st, now);
+  assert.equal(d.segments.length, 1);
+  assert.equal(d.worked, 0);
+  assert.equal(d.extra.length, 0);
+});

@@ -228,6 +228,23 @@
     </form>
   </dialog>
 
+  <div id="reconnect" class="reconnect" hidden aria-live="polite">
+    <div class="reconnect-card">
+      <div class="avatar" id="reconnect-avatar"></div>
+      <div class="reconnect-badge" id="reconnect-badge"><span class="spinner"></span></div>
+      <h2 id="reconnect-title">Reconectando con Google</h2>
+      <p id="reconnect-email" class="reconnect-email"></p>
+      <p id="reconnect-text" class="hint">Renovando el acceso a tu copia de Google Drive…</p>
+      <button type="button" id="reconnect-close" class="btn small">Continuar sin sincronizar</button>
+    </div>
+  </div>
+
+  <div id="welcome" class="welcome" role="status" aria-live="polite">
+    <div class="avatar small" id="welcome-avatar"></div>
+    <div><strong id="welcome-title">Bienvenido de nuevo</strong><small id="welcome-email"></small></div>
+    <span class="welcome-check">✓</span>
+  </div>
+
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script type="module" src="js/app.js"></script>

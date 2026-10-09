@@ -96,7 +96,7 @@ function scheduleHint(now, today, open) {
   if (!today.workday) {
     return `Hoy: ${today.kind.toLowerCase()}. No se espera jornada; todo lo que fiches cuenta como horas extra.`;
   }
-  if (today.worked === 0) return `Jornada de hoy: ${target} h (horario habitual ${describeSchedule(sched)}).`;
+  if (today.worked === 0) return `Jornada de hoy: ${target} h · horario habitual ${describeSchedule(sched)}.`;
   if (today.pending > 0) {
     return open
       ? `Completas tus ${target} h a las ${fmtTime(now + today.pending)}. A partir de ahí, horas extra.`
@@ -516,6 +516,62 @@ function renderCloud() {
   }[c.status] || '☁';
 }
 
+// Transición al renovar la sesión de Google (la ventana de Google se abre encima un instante)
+let reconnectTimer;
+const initialOf = (email) => (email || '?').trim().charAt(0) || '?';
+
+function hideReconnect() {
+  const el = $('#reconnect');
+  clearTimeout(reconnectTimer);
+  if (el.hidden) return;
+  el.classList.add('closing');
+  setTimeout(() => {
+    el.hidden = true;
+    el.classList.remove('closing');
+  }, 300);
+}
+
+function showWelcome(title, email) {
+  $('#welcome-avatar').textContent = initialOf(email);
+  $('#welcome-title').textContent = title;
+  $('#welcome-email').textContent = email || '';
+  const el = $('#welcome');
+  el.classList.add('show');
+  clearTimeout(showWelcome.t);
+  showWelcome.t = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+function onCloudEvent(ev) {
+  if (ev.type === 'renewing') {
+    $('#reconnect-avatar').textContent = initialOf(ev.email);
+    $('#reconnect-email').textContent = ev.email || '';
+    $('#reconnect-title').textContent = 'Reconectando con Google';
+    $('#reconnect-text').textContent = 'Renovando el acceso a tu copia de Google Drive…';
+    const badge = $('#reconnect-badge');
+    badge.className = 'reconnect-badge';
+    badge.innerHTML = '<span class="spinner"></span>';
+    $('#reconnect').hidden = false;
+    clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(hideReconnect, 90000);
+  } else if (ev.type === 'renewed') {
+    const badge = $('#reconnect-badge');
+    badge.className = 'reconnect-badge ok';
+    badge.textContent = '✓';
+    $('#reconnect-title').textContent = 'Sesión renovada';
+    $('#reconnect-text').textContent = 'Sincronizando tus fichajes…';
+    clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(() => {
+      hideReconnect();
+      showWelcome('¡Hola de nuevo!', ev.email);
+    }, 900);
+  } else if (ev.type === 'renew-failed') {
+    hideReconnect();
+    toast('No se pudo renovar la sesión de Google. Toca ☁ para reintentarlo.');
+  } else if (ev.type === 'signed-in') {
+    showWelcome('Sesión iniciada', ev.email);
+  }
+}
+
 async function confirmDeleteRemote() {
   if (!confirm('¿Borrar la copia de tus fichajes guardada en Google Drive y cerrar sesión? '
     + 'Los fichajes de este dispositivo no se borran.')) return;
@@ -636,6 +692,7 @@ function bind() {
     toast('Sesión de Google cerrada');
   });
   $('#cloud-delete').addEventListener('click', confirmDeleteRemote);
+  $('#reconnect-close').addEventListener('click', hideReconnect);
 
   $('#backup-export').addEventListener('click', exportBackup);
   $('#backup-import').addEventListener('change', (e) => {
@@ -671,6 +728,7 @@ async function init(first = true) {
     bind();
     db.requestPersistence();
     cloud.subscribe(renderCloud);
+    cloud.onEvent(onCloudEvent);
     renderCloud();
     await cloud.init({ onData: () => init(false) });
   }
