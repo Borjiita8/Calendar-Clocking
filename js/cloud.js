@@ -43,6 +43,15 @@ function set(patch) {
   for (const fn of listeners) fn(getState());
 }
 
+// Avisos puntuales para la interfaz: renovando, renovada, fallo al renovar, sesión iniciada
+const eventListeners = new Set();
+export function onEvent(fn) {
+  eventListeners.add(fn);
+}
+function emit(type, data = {}) {
+  for (const fn of eventListeners) fn({ type, email: state.email, ...data });
+}
+
 // ---------- Token de acceso ----------
 
 function loadToken() {
@@ -242,6 +251,18 @@ function schedule(delay = 1500) {
   timer = setTimeout(sync, delay);
 }
 
+/** Renueva la sesión de Google avisando a la interfaz para que muestre la transición. */
+function renew() {
+  emit('renewing');
+  return requestToken('').then((t) => {
+    emit('renewed');
+    return t;
+  }, (e) => {
+    emit('renew-failed', { message: e.message });
+    throw e;
+  });
+}
+
 /**
  * Llamar al principio de cualquier acción del usuario que modifique datos: si la sesión de
  * Google ha caducado, la renueva aprovechando el toque (Google solo permite abrir su ventana
@@ -249,14 +270,14 @@ function schedule(delay = 1500) {
  */
 export function touch() {
   if (!enabled || !state.email || tokenValid() || !tokenClient) return;
-  requestToken('').then(() => schedule(300), () => set({ status: 'pending', message: 'Toca para sincronizar' }));
+  renew().then(() => schedule(300), () => set({ status: 'pending', message: 'Toca para sincronizar' }));
 }
 
 /** Sincronización pedida explícitamente por el usuario (botón). */
 export async function syncNow() {
   if (!state.email) return;
   try {
-    if (!tokenValid()) await requestToken('');
+    if (!tokenValid()) await renew();
     await sync();
   } catch (e) {
     set({ status: 'pending', message: e.message });
@@ -276,6 +297,7 @@ export async function signIn() {
     await db.setMeta('cloudFileId', null);
     await db.setMeta('cloudAccount', { email: info.email, lastSync: null });
     set({ email: info.email, lastSync: null });
+    emit('signed-in');
     await sync();
   } catch (e) {
     set({ status: state.email ? 'error' : 'signedOut', message: e.message });
@@ -295,7 +317,7 @@ export async function signOut() {
 
 /** Borra la copia de Google Drive y cierra la sesión. Los datos del dispositivo se conservan. */
 export async function deleteRemote() {
-  if (!tokenValid()) await requestToken('');
+  if (!tokenValid()) await renew();
   const id = await findFile();
   if (id) await api(`/drive/v3/files/${id}`, { method: 'DELETE' });
   await signOut();

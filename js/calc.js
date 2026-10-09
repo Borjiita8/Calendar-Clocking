@@ -252,8 +252,10 @@ export function computeDays(sessions, settings, now = Date.now()) {
   for (const s of sessions) {
     const start = floorMinute(s.start);
     const end = floorMinute(s.end ?? now);
-    if (end <= start) continue;
-    for (const seg of splitByDay(start, end)) {
+    // Un fichaje recién abierto (aún sin un minuto completo) se muestra igualmente
+    const segs = end > start ? splitByDay(start, end)
+      : (s.end == null ? [{ key: dayKey(start), start, end: start }] : []);
+    for (const seg of segs) {
       if (!days.has(seg.key)) days.set(seg.key, emptyDay(seg.key, settings));
       days.get(seg.key).segments.push({ ...seg, session: s, open: s.end == null });
     }
