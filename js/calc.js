@@ -91,6 +91,13 @@ export function fmtKey(key) {
 }
 
 /** Duración en formato H:MM (con signo si negativa). */
+/** Duración con signo: +2:30, −1:15 o 0:00. */
+export function fmtSigned(ms) {
+  const minutes = Math.round(ms / 60000);
+  if (minutes === 0) return '0:00';
+  return (minutes > 0 ? '+' : '−') + fmtDur(Math.abs(minutes) * 60000);
+}
+
 export function fmtDur(ms) {
   const sign = ms < 0 ? '-' : '';
   const totalMin = Math.round(Math.abs(ms) / 60000);
@@ -282,6 +289,13 @@ export function monthDays(y, m, sessions, settings, now = Date.now()) {
     const key = keyOf(y, m, d);
     const day = days.get(key) || finishDay(emptyDay(key, settings));
     if (key > todayKey && day.segments.length === 0) continue;
+    if (key === todayKey) {
+      // El día de hoy aún no ha terminado: suma si ya se ha superado la jornada,
+      // pero lo que falta no se descuenta hasta que acabe el día.
+      day.inProgress = true;
+      day.pending = 0;
+      day.balance = day.overtime;
+    }
     out.push(day);
   }
   return out;
@@ -297,7 +311,8 @@ export function sumDays(days) {
     if (d.kind === 'Vacaciones') t.vacationDays++;
     if (d.segments.length) t.workedDays++;
   }
-  t.balance = t.worked - t.expected;
+  // Saldo de horas extra: lo trabajado de más menos lo trabajado de menos (puede ser negativo)
+  t.balance = t.overtime - t.pending;
   return t;
 }
 

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DEFAULT_SETTINGS, zonedToUtc, zonedParts, computeDays, dayStats, monthDays, sumDays,
-  spanishNationalHolidays, fmtDur, fromLocalInput, toLocalInput, workingDaysBetween, dailyTarget, weeklyTarget, validateSchedule,
+  spanishNationalHolidays, fmtDur, fmtSigned, fromLocalInput, toLocalInput, workingDaysBetween, dailyTarget, weeklyTarget, validateSchedule,
 } from '../js/calc.js';
 import { monthWorkbook, monthIcs } from '../js/report.js';
 
@@ -201,4 +201,34 @@ test('un fichaje recién abierto aparece en el día aunque no haya pasado un min
   assert.equal(d.segments.length, 1);
   assert.equal(d.worked, 0);
   assert.equal(d.extra.length, 0);
+});
+
+test('saldo de horas extra: lo de más menos lo de menos, puede ser negativo', () => {
+  // 1/10 jueves +1:00, 2/10 viernes −3:00 (compensa), hoy 5/10 lunes en curso
+  const list = [
+    sess('a', at(2026, 10, 1, 7), at(2026, 10, 1, 16)),
+    sess('b', at(2026, 10, 2, 7), at(2026, 10, 2, 12)),
+    sess('c', at(2026, 10, 5, 7), null),
+  ];
+  const now = at(2026, 10, 5, 10);
+  const days = monthDays(2026, 10, list, st, now);
+  const tot = sumDays(days);
+  assert.equal(tot.overtime, 1 * H);
+  assert.equal(tot.pending, 3 * H); // lo que falta de hoy aún no se descuenta
+  assert.equal(tot.balance, -2 * H);
+  const today = days.find((d) => d.key === '2026-10-05');
+  assert.ok(today.inProgress);
+  assert.equal(today.balance, 0);
+  // si hoy ya se supera la jornada, sí suma
+  const late = sumDays(monthDays(2026, 10, list, st, at(2026, 10, 5, 16)));
+  assert.equal(late.balance, -1 * H);
+  // al día siguiente, el día ya cerrado descuenta lo que faltó
+  const closed = [...list.slice(0, 2), sess('c', at(2026, 10, 5, 7), at(2026, 10, 5, 13))];
+  assert.equal(sumDays(monthDays(2026, 10, closed, st, at(2026, 10, 6, 9))).balance, -4 * H);
+});
+
+test('formato con signo', () => {
+  assert.equal(fmtSigned(2.5 * H), '+2:30');
+  assert.equal(fmtSigned(-75 * M), '−1:15');
+  assert.equal(fmtSigned(20000), '0:00');
 });

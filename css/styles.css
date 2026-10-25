@@ -378,3 +378,6 @@ dialog input[type="date"] { padding: 10px 8px; }
   .reconnect, .reconnect-card, .spinner, .reconnect-badge.ok { animation: none; }
   .welcome { transition: none; }
 }
+
+.stats-card .stats { grid-template-columns: repeat(2, 1fr); }
+.stats-note { text-align: center; margin: 8px 0 0; font-size: .8rem; }

@@ -1,9 +1,10 @@
 # Fichajes · Registro de jornada
 
 **Fichajes** es una aplicación web para llevar el control personal de la jornada laboral desde el
-móvil. Permite hacer *clock in* y *clock out* con un solo toque, calcula automáticamente las horas
-extra y las horas pendientes de compensar según el horario de cada persona, y genera informes
-mensuales en Excel listos para entregar o para trasladar al calendario de la empresa.
+móvil. Permite hacer *clock in* y *clock out* con un solo toque, calcula automáticamente el saldo de
+horas extra según el horario de cada persona (sumando lo trabajado de más y restando lo
+compensado) y genera informes mensuales en Excel listos para entregar o para trasladar al
+calendario de la empresa.
 
 Funciona sin conexión y se instala como una app en Android, iPhone y ordenador. Los datos se
 guardan en el dispositivo y, de forma opcional, en el **Google Drive del propio usuario** para
@@ -144,15 +145,18 @@ La aplicación tiene cuatro pantallas, accesibles desde la barra inferior.
   Tocando un fichaje se puede editar.
 
 ### Historial
-- Fichajes de cada mes agrupados por día, con el total trabajado y las horas extra (+) o
-  pendientes (−) de cada día.
+- En la parte superior, el total trabajado del mes y el **saldo de horas extra**: las horas
+  trabajadas de más menos las compensadas (trabajadas de menos). Puede ser negativo si se ha
+  compensado más de lo acumulado.
+- Debajo, los fichajes de cada día con el total trabajado y su saldo: **+** si se trabajó de más y
+  **−** si se trabajó de menos. El día de hoy aparece «en curso» hasta que termina.
 - **+ Añadir** permite registrar fichajes de otros días. Marca **«Sigo trabajando»** si el fichaje
   aún no tiene hora de salida.
 - Tocando cualquier fichaje se puede corregir la entrada o la salida, añadir una nota o eliminarlo.
 
 ### Informes
-- Selecciona el mes y consulta el resumen: horas trabajadas, jornada teórica, horas extra, horas
-  pendientes, balance neto, días con fichajes y días de vacaciones.
+- Selecciona el mes y consulta el resumen: horas trabajadas, jornada teórica, horas de más, horas
+  de menos (compensadas), saldo de horas extra, días con fichajes y días de vacaciones.
 - **Descargar Excel**, **Compartir Excel** y **Horas extra para calendario (.ics)**.
 
 ### Ajustes
@@ -177,9 +181,15 @@ Por ejemplo, 07:00–15:00 sin break son 8 h; 08:00–17:00 con 60 minutos de br
 
 Cada día se suman todos los tramos fichados y se comparan con la jornada:
 
-- **Horas extra**: lo trabajado por encima de la jornada del día.
-- **Horas pendientes de compensar**: lo que falta para completar la jornada.
-- **Balance**: horas extra menos horas pendientes.
+- **Horas de más**: lo trabajado por encima de la jornada del día.
+- **Horas de menos (compensadas)**: lo que falta para completar la jornada, por ejemplo al salir
+  antes para compensar horas extra anteriores.
+- **Saldo de horas extra**: horas de más menos horas de menos. Es el valor que muestra el
+  Historial y puede ser negativo.
+
+El día en curso suma en el saldo en cuanto se supera la jornada, pero las horas que faltan solo se
+descuentan cuando el día ha terminado. Así el saldo no baja cada mañana antes de completar la
+jornada.
 
 Lo que cuenta es el **tiempo total trabajado**, no la hora de entrada o de salida. Entrar más tarde
 y salir más tarde no genera horas extra si el total no supera la jornada.
@@ -187,15 +197,18 @@ y salir más tarde no genera horas extra si el total no supera la jornada.
 En **fines de semana, festivos, vacaciones** y días marcados como no laborables no se espera
 jornada: todo el tiempo fichado se considera hora extra.
 
-| Situación | Horario del día | Fichajes | Horas extra | Pendiente |
-|---|---|---|---|---|
-| Jornada normal | 07:00–15:00 (8 h) | 07:00–15:00 | 0:00 | 0:00 |
-| Entrada tarde, comida y vuelta | 07:00–15:00 (8 h) | 07:56–13:00 y 14:00–17:30 | 0:34 | 0:00 |
-| Tarde adicional | 07:00–15:00 (8 h) | 07:00–15:00 y 16:00–18:30 | 2:30 | 0:00 |
-| Salida anticipada | 07:00–15:00 (8 h) | 07:00–13:00 | 0:00 | 2:00 |
-| Jornada partida | 08:00–17:00, break 60 min (8 h) | 08:00–13:00 y 14:00–17:30 | 0:30 | 0:00 |
-| Viernes intensivo | 08:00–14:00 (6 h) | 08:00–14:30 | 0:30 | 0:00 |
-| Sábado, festivo o vacaciones | — | 10:00–12:00 | 2:00 | 0:00 |
+| Situación | Horario del día | Fichajes | Saldo del día |
+|---|---|---|---|
+| Jornada normal | 07:00–15:00 (8 h) | 07:00–15:00 | 0:00 |
+| Entrada tarde, comida y vuelta | 07:00–15:00 (8 h) | 07:56–13:00 y 14:00–17:30 | +0:34 |
+| Tarde adicional | 07:00–15:00 (8 h) | 07:00–15:00 y 16:00–18:30 | +2:30 |
+| Salida anticipada (compensación) | 07:00–15:00 (8 h) | 07:00–13:00 | −2:00 |
+| Jornada partida | 08:00–17:00, break 60 min (8 h) | 08:00–13:00 y 14:00–17:30 | +0:30 |
+| Viernes intensivo | 08:00–14:00 (6 h) | 08:00–14:30 | +0:30 |
+| Sábado, festivo o vacaciones | — | 10:00–12:00 | +2:00 |
+
+Ejemplo de mes: +2:30 un día, +0:34 otro y −2:00 al compensar dan un saldo de **+1:04**. Si
+después se compensan otras 2 h, el saldo pasa a **−0:56**.
 
 **Criterios adicionales**
 - Las pausas para comer se registran con un *clock out* y un nuevo *clock in*; el tiempo de pausa
@@ -207,7 +220,7 @@ jornada: todo el tiempo fichado se considera hora extra.
 - Las horas se interpretan en la **zona horaria del dispositivo**, incluido el cambio de hora de
   verano e invierno. El Excel indica la zona horaria usada.
 - La jornada teórica del mes cuenta los días laborables hasta la fecha actual. Registrar vacaciones
-  y festivos evita que esos días aparezcan como horas pendientes.
+  y festivos evita que esos días resten en el saldo.
 
 ---
 
@@ -217,8 +230,8 @@ jornada: todo el tiempo fichado se considera hora extra.
 
 | Hoja | Contenido |
 |---|---|
-| **Resumen** | Horario de cada día de la semana y jornada semanal; totales del mes: horas trabajadas, jornada teórica, horas extra, horas pendientes, balance neto, días con fichajes, días y periodos de vacaciones. |
-| **Diario** | Una fila por día: tipo de día (laborable, festivo, vacaciones, fin de semana), número de fichajes, primera entrada, última salida, trabajado, jornada, horas extra, pendiente y balance, con fila de totales. |
+| **Resumen** | Horario de cada día de la semana y jornada semanal; totales del mes: horas trabajadas, jornada teórica, horas de más, horas de menos, saldo de horas extra, días con fichajes, días y periodos de vacaciones. |
+| **Diario** | Una fila por día: tipo de día (laborable, festivo, vacaciones, fin de semana), número de fichajes, primera entrada, última salida, trabajado, jornada, horas de más, horas de menos y saldo, con fila de totales. |
 | **Fichajes** | Cada tramo de entrada y salida con su duración, la parte que es hora extra, el origen (botón o manual) y la nota. |
 | **Horas extra** | Cada tramo de horas extra con fecha, hora de inicio, hora de fin, duración y motivo, listo para trasladar al calendario de la empresa. |
 
