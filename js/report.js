@@ -1,7 +1,7 @@
 // Generación de informes mensuales (.xlsx y .ics) a partir de los fichajes.
 import {
   DAY_MS, TZ, MONTHS, WEEKDAYS, monthDays, sumDays, excelSerial, excelDateSerial,
-  fmtDur, fmtKey, scheduleFor, scheduleTarget, describeSchedule, weeklyTarget,
+  fmtDur, fmtSigned, fmtKey, scheduleFor, scheduleTarget, describeSchedule, weeklyTarget,
 } from './calc.js';
 import { buildXlsx, colName } from './xlsx.js';
 
@@ -28,7 +28,7 @@ export function monthWorkbook(y, m, sessions, settings, now = Date.now()) {
   // Diario
   const daily = [[
     'Fecha', 'Día', 'Tipo', 'Nº fichajes', 'Primera entrada', 'Última salida',
-    'Trabajado', 'Jornada', 'Horas extra', 'Pendiente', 'Balance (h)',
+    'Trabajado', 'Jornada', 'De más', 'De menos', 'Saldo (h)',
   ].map((v) => ({ v, s: 'header' }))];
   for (const day of days) {
     const first = day.segments[0];
@@ -109,14 +109,14 @@ export function monthWorkbook(y, m, sessions, settings, now = Date.now()) {
       return [`  ${WEEKDAYS[wd]}`, sched ? `${describeSchedule(sched)} → ${fmtDur(scheduleTarget(sched))} h` : 'No laborable'];
     }),
     ['Jornada semanal', `${fmtDur(weeklyTarget(settings))} h`],
-    ['Criterio', 'Horas extra = lo trabajado por encima de la jornada del día (horario menos break); en fines de semana, festivos y vacaciones todo es extra. Pendiente = lo que falta para completar la jornada.'],
+    ['Criterio', 'Horas de más = lo trabajado por encima de la jornada del día (horario menos break); en fines de semana, festivos y vacaciones todo cuenta como horas de más. Horas de menos = lo que falta para completar la jornada (horas compensadas). Saldo de horas extra = horas de más − horas de menos. El día en curso solo descuenta horas de menos cuando termina.'],
     [],
     [{ v: 'Concepto', s: 'header' }, { v: 'Horas', s: 'header' }],
     ['Horas trabajadas', dur(tot.worked)],
     ['Jornada teórica', dur(tot.expected)],
-    [{ v: 'Horas extra', s: 'bold' }, { v: tot.overtime / DAY_MS, s: 'boldDur' }],
-    [{ v: 'Horas pendientes de compensar', s: 'bold' }, { v: tot.pending / DAY_MS, s: 'boldDur' }],
-    ['Balance neto (extra − pendiente)', `${tot.balance > 0 ? '+' : ''}${fmtDur(tot.balance)} h`],
+    ['Horas de más', dur(tot.overtime)],
+    ['Horas de menos (compensadas)', dur(tot.pending)],
+    [{ v: 'Saldo de horas extra', s: 'bold' }, { v: `${fmtSigned(tot.balance)} h`, s: 'bold' }],
     ['Días con fichajes', tot.workedDays],
     ['Días de vacaciones', tot.vacationDays],
     ['Periodos de vacaciones', vacations.join(', ') || '—'],

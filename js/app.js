@@ -2,7 +2,7 @@ import * as db from './db.js';
 import * as cloud from './cloud.js';
 import {
   DEFAULT_SETTINGS, WEEKDAYS, MONTHS, monthDays, sumDays, dayStats, dayKey, zonedParts,
-  zonedToUtc, dailyTarget, floorMinute, scheduleFor, scheduleTarget, describeSchedule,
+  zonedToUtc, dailyTarget, fmtSigned, floorMinute, scheduleFor, scheduleTarget, describeSchedule,
   validateSchedule, generalDays, weeklyTarget, weekdayOf, workingDaysBetween, fmtTime, fmtDur, fmtKey, toLocalInput,
   fromLocalInput, spanishNationalHolidays,
 } from './calc.js';
@@ -251,17 +251,29 @@ function renderHistorial() {
   const all = monthDays(y, m, state.sessions, state.settings);
   const tot = sumDays(all);
   $('#hist-worked').textContent = fmtDur(tot.worked);
-  $('#hist-extra').textContent = fmtDur(tot.overtime);
-  $('#hist-pending').textContent = fmtDur(tot.pending);
+  setBalance($('#hist-extra'), tot.balance);
   const days = all.filter((d) => d.segments.length).reverse();
   $('#hist-list').innerHTML = days.length ? days.map((d) => `
     <div class="card day">
       <div class="day-head">
         <div><strong>${WEEKDAYS[d.weekday]} ${d.d}</strong> <span class="muted">${d.kind !== 'Laborable' ? d.kind : ''}</span></div>
-        <div class="day-tot">${fmtDur(d.worked)}${d.overtime ? ` <span class="extra">+${fmtDur(d.overtime)}</span>` : ''}${d.pending ? ` <span class="pending">−${fmtDur(d.pending)}</span>` : ''}</div>
+        <div class="day-tot">${fmtDur(d.worked)} ${dayBalance(d)}</div>
       </div>
       <ul class="sessions">${d.segments.map((seg) => sessionItem(seg)).join('')}</ul>
     </div>`).join('') : '<p class="empty">No hay fichajes este mes.</p>';
+}
+
+/** Pinta un saldo con signo: verde/ámbar si es a favor, rojo si es en contra. */
+function setBalance(el, ms) {
+  el.textContent = fmtSigned(ms);
+  el.classList.toggle('extra', ms >= 60000);
+  el.classList.toggle('pending', ms <= -60000);
+}
+
+function dayBalance(d) {
+  if (d.inProgress && d.overtime < 60000) return '<span class="muted">en curso</span>';
+  if (Math.abs(d.balance) < 60000) return '';
+  return `<span class="${d.balance > 0 ? 'extra' : 'pending'}">${fmtSigned(d.balance)}</span>`;
 }
 
 // ---------- Informes ----------
@@ -274,7 +286,7 @@ function renderInformes() {
   $('#rep-expected').textContent = fmtDur(tot.expected);
   $('#rep-extra').textContent = fmtDur(tot.overtime);
   $('#rep-pending').textContent = fmtDur(tot.pending);
-  $('#rep-balance').textContent = (tot.balance > 0 ? '+' : '') + fmtDur(tot.balance);
+  setBalance($('#rep-balance'), tot.balance);
   $('#rep-days').textContent = tot.workedDays;
   $('#rep-vac').textContent = tot.vacationDays;
 }
